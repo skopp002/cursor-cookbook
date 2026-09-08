@@ -1,0 +1,33 @@
+%% Simple component view. Render PNG: python3 diagrams/render_architecture.py
+flowchart LR
+  OP[Operator]
+  SM[Secrets Manager]
+  ECR[Amazon ECR]
+  RT[AgentCore Runtime]
+  EC2[Managed instance]
+  EBS[EBS /mnt/workspace]
+  CA[Cursor Cloud Agents]
+  GH[Sample app repo]
+  GHA[GitHub Actions]
+
+  subgraph AWS["AWS account us-west-2"]
+    SM
+    ECR
+    subgraph VPC["VPC egress only"]
+      RT
+      EC2
+      EBS
+    end
+  end
+
+  OP -.->|put-secret| SM
+  OP -.->|push image| ECR
+  OP -->|InvokeAgentRuntime| RT
+  SM -->|GetSecretValue| EC2
+  ECR -->|pull image| EC2
+  EBS -->|mount workspace| EC2
+  RT -->|start session| EC2
+  EC2 -->|outbound HTTPS| CA
+  GH -->|workflow| GHA
+  GHA -->|POST /v1/agents| CA
+  CA -->|GitHub App PR| GH

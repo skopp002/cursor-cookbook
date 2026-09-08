@@ -18,6 +18,7 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 
 - This README: architecture, resource summary, security model, operations, validation, and troubleshooting.
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): the design problem, functional and non-functional requirements, IAM roles, quotas, acceptance criteria, and open questions.
+- [`diagrams/architecture.png`](diagrams/architecture.png): simple component diagram (official AWS and GitHub icons, labeled edges). Regenerate with `python3 diagrams/render_architecture.py`.
 - [`terraform/README.md`](terraform/README.md): command runbook — `.env` / `export`, Terraform, image publishing, session lifecycle, key rotation, and cleanup.
 - [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): detailed secrets and env-var runbook (laptop `export`, GitHub Actions secrets, Terraform runtime env, adapter `GetSecretValue`, and the 15-step commands). Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
 
@@ -44,25 +45,9 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 
 ## Architecture
 
-```text
-Cursor Cloud Agents  ──── outbound HTTPS (worker dials out) ────┐
-                                                               │
-Operator ── InvokeAgentRuntime ──▶ AgentCore Runtime           │
-                                        │                      │
-                                        ▼                      │
-                              Capacity Provider                │
-                                        │                      │
-                  ┌─────────────────────▼──────────────────────┴──┐
-                  │  EC2 managed instance (customer account, VPC)  │
-                  │                                               │
-                  │   adapter (PID 1) ── 0.0.0.0:8080             │
-                  │     ├── GET  /ping  -> HealthyBusy            │
-                  │     ├── POST /invocations -> status           │
-                  │     └── child: agent worker --pool ... start   │
-                  │                                               │
-                  │   /mnt/workspace  <- persistent EBS volume     │
-                  └───────────────────────────────────────────────┘
-```
+![Self-hosted Cloud Agents on AgentCore](diagrams/architecture.png)
+
+Dashed edges are setup (secrets and image). Solid edges are session start, registration, kickoff, and the PR.
 
 Detailed runbook (how to `export` / `.env` each variable, where it lands, and the 15-step commands): [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png). Command sequence: [`terraform/README.md`](terraform/README.md).
 
