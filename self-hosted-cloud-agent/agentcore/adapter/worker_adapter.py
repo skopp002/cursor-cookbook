@@ -494,10 +494,7 @@ class WorkerSupervisor:
         labels_file = self.resolve_labels_file()
         if labels_file:
             args += ["--labels-file", labels_file]
-        slug = self.github_repo_label(self.config.repository_url)
-        if slug:
-            args += ["--label", f"repo={slug}"]
-            log(f"advertising Cursor repo label {slug}")
+        # The CLI rejects --label together with --labels-file. repo= lives in the JSON.
         if self.config.management_addr:
             args += ["--management-addr", self.config.management_addr]
 

@@ -304,7 +304,7 @@ The worker options belong before the `start` subcommand. `build_command()` in th
 
 The adapter can set `origin` correctly and still fail routing. Cursor matches a pool job to a worker with both `pool=` and `repo=` labels. `Repo: (repo unavailable)` means the CLI did not derive `repo=owner/repo` from `/mnt/workspace`, so a Cloud Agent for that GitHub repo waits with **No self-hosted workers are connected** even while `/ping` is `HealthyBusy`.
 
-Confirm the next session logs `Repo: kaushalavardhanam/kaushalavardhanam` (or your owner/repo), not `(repo unavailable)`. The adapter now passes `--label repo=...` from `WORKER_REPOSITORY_URL` and sets `safe.directory` so the CLI can read origin on an AgentCore volume. Publish a new image and start a **new** session; a running session does not pick up the image.
+Confirm the next session logs `Repo: kaushalavardhanam/kaushalavardhanam` (or your owner/repo), not `(repo unavailable)`. The adapter puts `repo` in the labels file (the CLI rejects `--label` together with `--labels-file`) and sets `safe.directory` so it can read origin on an AgentCore volume. Publish a new image and start a **new** session; a running session does not pick up the image.
 
 The `http code 400, message Bad request syntax ('13')` line is AgentCore sending a non-HTTP probe to port 8080. It is unrelated to pool registration.
 

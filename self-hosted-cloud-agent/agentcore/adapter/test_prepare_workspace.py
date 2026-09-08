@@ -213,10 +213,10 @@ class RepoRoutingLabelTests(unittest.TestCase):
         config.max_restarts = 0
         self.supervisor = adapter.WorkerSupervisor(config, adapter.State())
 
-    def test_labels_file_and_cli_flag_include_repo(self) -> None:
+    def test_labels_file_includes_repo_without_cli_flag(self) -> None:
         command = self.supervisor.build_command()
-        self.assertIn("--label", command)
-        self.assertIn("repo=kaushalavardhanam/kaushalavardhanam", command)
+        self.assertNotIn("--label", command)
+        self.assertIn("--labels-file", command)
         labels_path = self.supervisor.resolve_labels_file()
         self.assertIsNotNone(labels_path)
         with open(labels_path, encoding="utf-8") as handle:
