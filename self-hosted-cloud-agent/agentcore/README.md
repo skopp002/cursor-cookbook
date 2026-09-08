@@ -26,12 +26,12 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 
 Run from `self-hosted-cloud-agent/agentcore`. The same `make agentcore-*` targets also work from `self-hosted-cloud-agent/`. Prerequisites, variable meanings, and validation live in [`terraform/README.md`](terraform/README.md).
 
-1. Copy the GitHub templates into the application repository the worker should clone and PR against (not this cookbook), then grant the Cursor GitHub App access to that repo:
+1. Copy the GitHub templates into the **sample repo** the worker should clone and PR against (not this cookbook). `kaushalavardhanam/kaushalavardhanam` is the example used to demonstrate Cloud Agent capacity. Then grant the Cursor GitHub App access to that sample repo:
 
 ```bash
-mkdir -p <app>/.github/workflows <app>/.github/scripts
-cp github/cursor-agent-in-progress.yml <app>/.github/workflows/
-cp github/kick_cursor_agent.py <app>/.github/scripts/
+mkdir -p <sample-repo>/.github/workflows <sample-repo>/.github/scripts
+cp github/cursor-agent-in-progress.yml <sample-repo>/.github/workflows/
+cp github/kick_cursor_agent.py <sample-repo>/.github/scripts/
 ```
 
 2. Configure `.env`:
@@ -40,7 +40,7 @@ cp github/kick_cursor_agent.py <app>/.github/scripts/
 cp .env.example .env
 ```
 
-Fill in AWS credentials, a Cursor **service account** API key, the pool name, and `WORKER_REPOSITORY_URL` for that application repo.
+Fill in AWS credentials, a Cursor **service account** API key, the pool name, and `WORKER_REPOSITORY_URL` for the sample repo (the example is `kaushalavardhanam/kaushalavardhanam`).
 
 3. Apply infrastructure, upload the key, push the image, and start a session:
 
@@ -85,7 +85,7 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 
 ![Self-hosted Cloud Agents on AgentCore](diagrams/architecture.png)
 
-The Operator sits outside the lanes. Configure is the sample repo (steps 1–2). Credentials is Secrets Manager and ECR (steps 3–5). Run is the session, registration, kickoff, and PR (steps 6–14). Step 1 copies the static templates in `github/` into the sample app (`.github/workflows/` and `.github/scripts/kick_cursor_agent.py`); the cookbook does not generate those files.
+The Operator sits outside the lanes. Configure is the sample repo (steps 1–2). Credentials is Secrets Manager and ECR (steps 3–5). Run is the session, registration, kickoff, and PR (steps 6–14). Step 1 copies the static templates in `github/` into the sample repo (`.github/workflows/` and `.github/scripts/kick_cursor_agent.py`); the cookbook does not generate those files.
 
 Detailed runbook (how to `export` / `.env` each variable, where it lands, and the 15-step commands): [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png). Command sequence: [`terraform/README.md`](terraform/README.md).
 
@@ -162,9 +162,9 @@ After changing the adapter or the Dockerfile, publish a new image and start a fr
 
 ### GitHub Project Kickoff (`agent-*` issues)
 
-`github/` in this lab is a **template**. Copy it into the application repository the pool worker should clone and PR against — not into this cookbook. **Kaushalavardhanam** (`kaushalavardhanam/kaushalavardhanam` and [org project 1](https://github.com/orgs/kaushalavardhanam/projects/1)) is the sample application used to exercise the lab. Point `WORKER_REPOSITORY_URL`, the workflow `PROJECT_*` env, and the Cursor GitHub App at your own repo when you are not running that sample.
+`github/` in this lab is a **template**. Copy it into the **sample repo** the pool worker should clone and PR against — not into this cookbook. [`kaushalavardhanam/kaushalavardhanam`](https://github.com/kaushalavardhanam/kaushalavardhanam) (and [org project 1](https://github.com/orgs/kaushalavardhanam/projects/1)) is the example sample repo used to demonstrate Cloud Agent capacity. It is not production software and not a required app. Any other repo can play the same role. Point `WORKER_REPOSITORY_URL`, the workflow `PROJECT_*` env, and the Cursor GitHub App at whatever sample repo you want the worker to patch.
 
-Issues whose title starts with `agent-` are picked up when they move to **In Progress** on that application’s project board. The workflow in the application repo launches a Cloud Agent on pool `agentcore-platform-agents` with `autoCreatePR` against `main`.
+Issues whose title starts with `agent-` are picked up when they move to **In Progress** on that sample repo’s project board. The workflow in the sample repo launches a Cloud Agent on pool `agentcore-platform-agents` with `autoCreatePR` against `main`.
 
 A project board does not fire a GitHub Actions event on drag, so the workflow polls every five minutes. It also starts immediately if you add the `in-progress` label or run the workflow manually. `GH_PROJECT_TOKEN` must be able to read that board’s Projects v2.
 
@@ -304,7 +304,7 @@ The worker options belong before the `start` subcommand. `build_command()` in th
 
 The adapter can set `origin` correctly and still fail routing. Cursor matches a pool job to a worker with both `pool=` and `repo=` labels. `Repo: (repo unavailable)` means the CLI did not derive `repo=owner/repo` from `/mnt/workspace`, so a Cloud Agent for that GitHub repo waits with **No self-hosted workers are connected** even while `/ping` is `HealthyBusy`.
 
-Confirm the next session logs `Repo: kaushalavardhanam/kaushalavardhanam` (or your owner/repo), not `(repo unavailable)`. The adapter puts `repo` in the labels file (the CLI rejects `--label` together with `--labels-file`) and sets `safe.directory` so it can read origin on an AgentCore volume. Publish a new image and start a **new** session; a running session does not pick up the image.
+Confirm the next session logs `Repo: kaushalavardhanam/kaushalavardhanam` (or whatever sample repo you pointed `WORKER_REPOSITORY_URL` at), not `(repo unavailable)`. The adapter puts `repo` in the labels file (the CLI rejects `--label` together with `--labels-file`) and sets `safe.directory` so it can read origin on an AgentCore volume. Publish a new image and start a **new** session; a running session does not pick up the image.
 
 The `http code 400, message Bad request syntax ('13')` line is AgentCore sending a non-HTTP probe to port 8080. It is unrelated to pool registration.
 

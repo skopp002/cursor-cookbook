@@ -1,10 +1,11 @@
 %% Simple component view. Render PNG: python3 diagrams/render_architecture.py
 %% Cookbook github/ is a static template, not generated. Copy:
-%%   github/cursor-agent-in-progress.yml -> <app>/.github/workflows/
-%%   github/kick_cursor_agent.py         -> <app>/.github/scripts/kick_cursor_agent.py
+%%   github/cursor-agent-in-progress.yml -> <sample-repo>/.github/workflows/
+%%   github/kick_cursor_agent.py         -> <sample-repo>/.github/scripts/kick_cursor_agent.py
+%% kaushalavardhanam is the example sample repo used to demonstrate Cloud Agent capacity.
 flowchart LR
   OP[Operator]
-  GH[Sample app repo]
+  GH[Sample repo]
   SM[Secrets Manager]
   ECR[Amazon ECR]
   RT[AgentCore Runtime]

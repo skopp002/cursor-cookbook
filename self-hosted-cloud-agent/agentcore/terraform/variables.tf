@@ -175,7 +175,7 @@ variable "worker_idle_release_timeout" {
 }
 
 variable "worker_repository_url" {
-  description = "Git remote of the application repo Cloud Agents work on (not this cookbook). Sample lab: https://github.com/kaushalavardhanam/kaushalavardhanam.git"
+  description = "Git remote of the sample repo Cloud Agents clone and PR against (not this cookbook). Lab example used to demonstrate Cloud Agent capacity: https://github.com/kaushalavardhanam/kaushalavardhanam.git"
   type        = string
 }
 

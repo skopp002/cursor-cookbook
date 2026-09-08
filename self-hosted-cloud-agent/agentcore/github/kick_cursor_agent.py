@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Start a Cursor Cloud Agent on the AgentCore self-hosted pool.
 
-This file is a template that lives in cursor-cookbook. Copy it into the *application*
-repo the worker should change (not this cookbook). The defaults below are the lab's
-sample application, kaushalavardhanam/kaushalavardhanam — replace them for your own repo.
+This file is a template that lives in cursor-cookbook. Copy it into the *sample
+repo* the worker should clone and PR against (not this cookbook). Defaults below
+are kaushalavardhanam/kaushalavardhanam, the example sample repo used to
+demonstrate Cloud Agent capacity — replace them for your own sample repo.
 
 Triggers:
   - GitHub Project v2 Status set to In Progress for issues whose title starts with 'agent-'
@@ -237,8 +238,9 @@ def main() -> int:
     comment_token = env("GITHUB_TOKEN")
     project_token = env("GH_PROJECT_TOKEN") or comment_token
     pool = env("CURSOR_POOL_NAME", "agentcore-platform-agents")
-    # Sample lab defaults: the cookbook's example application repo/org. Override in the
-    # workflow env when you copy this script onto a different repository.
+    # Sample lab defaults: kaushalavardhanam is the example sample repo/org used
+    # to demonstrate Cloud Agent capacity. Override in the workflow env when you
+    # copy this script onto a different sample repo.
     project_owner = env("PROJECT_OWNER", "kaushalavardhanam")
     project_number = int(env("PROJECT_NUMBER", "1") or "1")
     owner_type = env("PROJECT_OWNER_TYPE", "organization").lower()

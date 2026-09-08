@@ -88,7 +88,7 @@ Use a Cursor **service account API key**. `CURSOR_API_KEY` is used only to uploa
 
 Use an AgentCore-specific pool name so the worker is easy to identify in Cursor Cloud Agents.
 
-`WORKER_REPOSITORY_URL` is the application repository Cloud Agents clone and PR against, not cursor-cookbook. The lab sample is `https://github.com/kaushalavardhanam/kaushalavardhanam.git`. If the variable is empty, the Makefile defaults to this cookbook's git remote, which is wrong for the worker. The worker cannot register without a real application remote.
+`WORKER_REPOSITORY_URL` is the **sample repo** Cloud Agents clone and PR against, not cursor-cookbook. In this lab the example is `https://github.com/kaushalavardhanam/kaushalavardhanam.git`, used only to demonstrate Cloud Agent capacity. If the variable is empty, the Makefile defaults to this cookbook's git remote, which is wrong for the worker. The worker cannot register without a real sample-repo remote.
 
 Capacity provider and runtime names take letters, digits, and underscores only, and must start with a letter. Hyphens are rejected.
 

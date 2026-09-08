@@ -1,13 +1,14 @@
 # Template GitHub Actions workflow for the AgentCore lab in cursor-cookbook.
-# Copy this file into the *application* repository Cloud Agents should patch
-# (this cookbook is the worker/runtime, not that application).
+# Copy this file into the *sample repo* Cloud Agents should clone and PR against
+# (this cookbook is the worker/runtime, not that sample repo).
 #
-# Sample values below match the lab's example app:
+# kaushalavardhanam/kaushalavardhanam is the example sample repo used to
+# demonstrate Cloud Agent capacity. It is not a required production app.
 #   https://github.com/kaushalavardhanam/kaushalavardhanam
 #   https://github.com/orgs/kaushalavardhanam/projects/1
-# Replace PROJECT_OWNER, PROJECT_NUMBER, and the PAT scopes for your own org/repo.
+# Replace PROJECT_OWNER, PROJECT_NUMBER, and the PAT scopes for your sample repo.
 #
-# Required repo secrets on the application repo:
+# Required repo secrets on the sample repo:
 #   CURSOR_API_KEY     Cursor service account key (same value as the AgentCore worker)
 #   GH_PROJECT_TOKEN   Fine-grained PAT: Projects: Read on the org/user that owns the
 #                      board, plus repository access. GITHUB_TOKEN cannot read Projects v2.

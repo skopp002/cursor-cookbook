@@ -167,7 +167,7 @@ def main() -> None:
         (
             (254, 242, 242),
             RED,
-            "GitHub Actions  — sample app repo",
+            "GitHub Actions  — sample repo",
             [
                 "gh secret set CURSOR_API_KEY --body \"$CURSOR_API_KEY\"",
                 "gh secret set GH_PROJECT_TOKEN --body \"$GH_PROJECT_TOKEN\"",
@@ -177,7 +177,7 @@ def main() -> None:
                 "GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}",
                 "CURSOR_POOL_NAME: agentcore-platform-agents",
             ],
-            "Secrets live on the sample app, not the cookbook. GITHUB_TOKEN is automatic.",
+            "Secrets live on the sample repo, not the cookbook. GITHUB_TOKEN is automatic.",
         ),
         (
             (255, 247, 237),
@@ -185,7 +185,7 @@ def main() -> None:
             "AgentCore runtime  — Terraform",
             [
                 "CURSOR_API_KEY_SECRET_ID=<secret ARN>",
-                "WORKER_REPOSITORY_URL=<app git URL>",
+                "WORKER_REPOSITORY_URL=<sample-repo git URL>",
                 "CURSOR_WORKER_POOL_NAME=agentcore-platform-agents",
                 "CURSOR_WORKER_DIR=/mnt/workspace",
                 "CURSOR_WORKER_IDLE_RELEASE_TIMEOUT=600",
@@ -231,7 +231,7 @@ def main() -> None:
         ("cmt", "# laptop  →  Secrets Manager   (Terraform does not see the value)"),
         ("cmd", "make agentcore-put-api-key-secret     # reads $CURSOR_API_KEY from .env"),
         ("blank", ""),
-        ("cmt", "# laptop  →  GitHub Actions secrets on the SAMPLE APP repo"),
+        ("cmt", "# laptop  →  GitHub Actions secrets on the SAMPLE REPO"),
         ("cmd", "gh secret set CURSOR_API_KEY --repo kaushalavardhanam/kaushalavardhanam --body \"$CURSOR_API_KEY\""),
         ("cmd", "gh secret set GH_PROJECT_TOKEN --repo kaushalavardhanam/kaushalavardhanam --body \"$GH_PROJECT_TOKEN\""),
         ("blank", ""),
@@ -244,8 +244,8 @@ def main() -> None:
     y += 32
 
     steps = [
-        (TEAL, "Copy templates", "cp github/cursor-agent-in-progress.yml  github/kick_cursor_agent.py  →  <sample-app>/.github/"),
-        (TEAL, "Grant GitHub App", "Cursor dashboard: Team GitHub App on the sample app repo (PR grant, not a Git credential)"),
+        (TEAL, "Copy templates", "cp github/cursor-agent-in-progress.yml  github/kick_cursor_agent.py  →  <sample-repo>/.github/"),
+        (TEAL, "Grant GitHub App", "Cursor dashboard: Team GitHub App on the sample repo (PR grant, not a Git credential)"),
         (TEAL, "Write .env / export", "cp .env.example .env   &&   export CURSOR_API_KEY=... WORKER_REPOSITORY_URL=... AWS_REGION=..."),
         (TEAL, "Create AWS infra", "make agentcore-terraform-apply     # ECR, secret container, IAM, runtime env. Does not boot a worker"),
         (TEAL, "Push worker image", "make agentcore-ecr-build-push     # linux/arm64 → ECR"),

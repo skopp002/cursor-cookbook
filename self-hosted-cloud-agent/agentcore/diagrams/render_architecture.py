@@ -6,8 +6,11 @@ Requires Graphviz and: pip install diagrams
 The cookbook does not generate sample-repo files. agentcore/github/ is a static
 template the operator copies by hand:
 
-  github/cursor-agent-in-progress.yml  ->  <app>/.github/workflows/
-  github/kick_cursor_agent.py          ->  <app>/.github/scripts/kick_cursor_agent.py
+  github/cursor-agent-in-progress.yml  ->  <sample-repo>/.github/workflows/
+  github/kick_cursor_agent.py          ->  <sample-repo>/.github/scripts/kick_cursor_agent.py
+
+kaushalavardhanam is the example sample repo used to demonstrate Cloud Agent
+capacity, not a required production app.
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ def main() -> None:
         operator = User("Operator")
 
         with Cluster("Configure"):
-            github = Github("Sample app repo")
+            github = Github("Sample repo")
 
         with Cluster("Create and export credentials"):
             secrets = SecretsManager("Secrets Manager")
