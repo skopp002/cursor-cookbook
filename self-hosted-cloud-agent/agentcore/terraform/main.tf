@@ -32,12 +32,36 @@ locals {
   vpc_id     = var.vpc_id != null ? var.vpc_id : data.aws_vpc.default[0].id
   subnet_ids = var.subnet_ids != null ? var.subnet_ids : data.aws_subnets.default[0].ids
 
-  worker_labels = {
-    environment    = var.worker_environment_label
-    infrastructure = "agentcore"
-    runtime        = "agentcore-instances"
-    owner          = var.worker_owner_label
-  }
+  # Cursor routes pool requests with a repo= label. The worker CLI also tries to
+  # derive that from git origin; if it prints "Repo: (repo unavailable)" the
+  # labels file still has to carry owner/repo or the job never matches.
+  worker_repo_label = try(
+    regex(
+      "^[^/]+/[^/]+$",
+      trimsuffix(
+        trimsuffix(
+          replace(
+            replace(var.worker_repository_url, "https://github.com/", ""),
+            "git@github.com:",
+            ""
+          ),
+          ".git"
+        ),
+        "/"
+      )
+    ),
+    null
+  )
+
+  worker_labels = merge(
+    {
+      environment    = var.worker_environment_label
+      infrastructure = "agentcore"
+      runtime        = "agentcore-instances"
+      owner          = var.worker_owner_label
+    },
+    local.worker_repo_label != null ? { repo = local.worker_repo_label } : {}
+  )
 
   worker_image = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_tag}"
 

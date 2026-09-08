@@ -8,6 +8,7 @@ fetched, and that failure must not prevent the worker from launching.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -167,6 +168,67 @@ class PrepareWorkspaceTests(unittest.TestCase):
             snapshot["last_error"],
             "fetch failure must not mark startup failed",
         )
+
+
+class GithubRepoLabelTests(unittest.TestCase):
+    def test_https_git_suffix(self) -> None:
+        self.assertEqual(
+            adapter.WorkerSupervisor.github_repo_label(
+                "https://github.com/kaushalavardhanam/kaushalavardhanam.git"
+            ),
+            "kaushalavardhanam/kaushalavardhanam",
+        )
+
+    def test_ssh_is_rewritten(self) -> None:
+        self.assertEqual(
+            adapter.WorkerSupervisor.github_repo_label(
+                "git@github.com:acme/payments.git"
+            ),
+            "acme/payments",
+        )
+
+    def test_non_github_is_empty(self) -> None:
+        self.assertEqual(adapter.WorkerSupervisor.github_repo_label("/tmp/bare.git"), "")
+
+
+class RepoRoutingLabelTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp(prefix="agentcore-ws-")
+        self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
+        config = adapter.Config()
+        config.worker_dir = self.tmpdir
+        config.repository_url = (
+            "https://github.com/kaushalavardhanam/kaushalavardhanam.git"
+        )
+        config.labels_file = os.path.join(self.tmpdir, "missing-labels.json")
+        config.labels_json = json.dumps(
+            {
+                "environment": "lab",
+                "infrastructure": "agentcore",
+                "runtime": "agentcore-instances",
+                "owner": "platform-team",
+            }
+        )
+        config.api_key = "test-service-account-key"
+        config.max_restarts = 0
+        self.supervisor = adapter.WorkerSupervisor(config, adapter.State())
+
+    def test_labels_file_and_cli_flag_include_repo(self) -> None:
+        command = self.supervisor.build_command()
+        self.assertIn("--label", command)
+        self.assertIn("repo=kaushalavardhanam/kaushalavardhanam", command)
+        labels_path = self.supervisor.resolve_labels_file()
+        self.assertIsNotNone(labels_path)
+        with open(labels_path, encoding="utf-8") as handle:
+            labels = json.load(handle)
+        self.assertEqual(labels["repo"], "kaushalavardhanam/kaushalavardhanam")
+
+    def test_worker_env_sets_safe_directory(self) -> None:
+        env = self.supervisor._worker_env("test-service-account-key")
+        self.assertEqual(env["GIT_CONFIG_KEY_0"], "safe.directory")
+        self.assertEqual(env["GIT_CONFIG_VALUE_0"], "*")
+        self.assertEqual(env["CURSOR_API_KEY"], "test-service-account-key")
+        self.assertNotIn("GIT_DIR", env)
 
 
 if __name__ == "__main__":

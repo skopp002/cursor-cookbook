@@ -251,6 +251,20 @@ class WorkerSupervisor:
         env["GIT_TERMINAL_PROMPT"] = "0"
         return env
 
+    def _worker_env(self, api_key: str) -> dict[str, str]:
+        """Environment for `agent worker`.
+
+        The CLI shells out to git without the adapter's `-c safe.directory=...` flag.
+        AgentCore volume mounts often trip "dubious ownership", which makes the CLI
+        print `Repo: (repo unavailable)` and omit the repo= routing label.
+        """
+        env = self._git_env()
+        env["CURSOR_API_KEY"] = api_key
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "safe.directory"
+        env["GIT_CONFIG_VALUE_0"] = "*"
+        return env
+
     def _git(self, *args: str, check: bool = True, timeout: int = 120) -> subprocess.CompletedProcess:
         """Run git in the worker directory, ignoring inherited GIT_* from the runtime."""
         worker_dir = self.config.worker_dir
@@ -278,6 +292,20 @@ class WorkerSupervisor:
         if url.startswith("ssh://git@github.com/"):
             return "https://github.com/" + url.removeprefix("ssh://git@github.com/")
         return url
+
+    @staticmethod
+    def github_repo_label(url: str) -> str:
+        """Return owner/repo for Cursor's repo= routing label, or empty if not GitHub."""
+        rewritten = WorkerSupervisor._https_repository_url(url.strip()).rstrip("/")
+        if rewritten.endswith(".git"):
+            rewritten = rewritten[: -len(".git")]
+        prefix = "https://github.com/"
+        if not rewritten.lower().startswith(prefix):
+            return ""
+        parts = [part for part in rewritten[len(prefix) :].split("/") if part]
+        if len(parts) < 2:
+            return ""
+        return f"{parts[0]}/{parts[1]}"
 
     def _ensure_git_directory(self) -> None:
         """Make /mnt/workspace a real repository, not an AgentCore gitfile/worktree."""
@@ -421,15 +449,33 @@ class WorkerSupervisor:
         self._log_workspace_ready()
 
     def resolve_labels_file(self) -> str | None:
-        """Write CURSOR_WORKER_LABELS_JSON to a file if provided, else use the baked file."""
-        if self.config.labels_json:
-            path = "/tmp/cursor-worker-labels.json"
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write(self.config.labels_json)
-            return path
+        """Merge baked labels, CURSOR_WORKER_LABELS_JSON, and repo= from the git URL."""
+        labels: dict[str, str] = {}
         if os.path.isfile(self.config.labels_file):
-            return self.config.labels_file
-        return None
+            try:
+                with open(self.config.labels_file, encoding="utf-8") as handle:
+                    parsed = json.load(handle)
+                if isinstance(parsed, dict):
+                    labels.update({str(key): str(value) for key, value in parsed.items()})
+            except (OSError, json.JSONDecodeError) as exc:
+                log(f"could not read {self.config.labels_file}: {exc}")
+        if self.config.labels_json:
+            try:
+                parsed = json.loads(self.config.labels_json)
+                if isinstance(parsed, dict):
+                    labels.update({str(key): str(value) for key, value in parsed.items()})
+            except json.JSONDecodeError as exc:
+                log(f"CURSOR_WORKER_LABELS_JSON is not JSON: {exc}")
+        slug = self.github_repo_label(self.config.repository_url)
+        if slug and not str(labels.get("repo") or "").strip():
+            labels["repo"] = slug
+        if not labels:
+            return None
+        path = "/tmp/cursor-worker-labels.json"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(labels, handle)
+        log(f"worker labels: {json.dumps(labels, sort_keys=True)}")
+        return path
 
     def build_command(self) -> list[str]:
         """Build the worker command.
@@ -448,6 +494,10 @@ class WorkerSupervisor:
         labels_file = self.resolve_labels_file()
         if labels_file:
             args += ["--labels-file", labels_file]
+        slug = self.github_repo_label(self.config.repository_url)
+        if slug:
+            args += ["--label", f"repo={slug}"]
+            log(f"advertising Cursor repo label {slug}")
         if self.config.management_addr:
             args += ["--management-addr", self.config.management_addr]
 
@@ -466,8 +516,7 @@ class WorkerSupervisor:
             self.state.mark_failed(str(exc))
             return
 
-        worker_env = self._git_env()
-        worker_env["CURSOR_API_KEY"] = api_key
+        worker_env = self._worker_env(api_key)
         # The agent CLI reads the repo label from cwd's git remote. Pin cwd so a
         # leftover GIT_DIR from the runtime cannot hide /mnt/workspace.
 

@@ -278,6 +278,14 @@ Create the key from Cursor's Service Accounts settings, update `.env`, upload th
 
 The worker options belong before the `start` subcommand. `build_command()` in the adapter follows the correct ordering; preserve it if you edit it.
 
+### Worker Logs `Repo: (repo unavailable)`
+
+The adapter can set `origin` correctly and still fail routing. Cursor matches a pool job to a worker with both `pool=` and `repo=` labels. `Repo: (repo unavailable)` means the CLI did not derive `repo=owner/repo` from `/mnt/workspace`, so a Cloud Agent for that GitHub repo waits with **No self-hosted workers are connected** even while `/ping` is `HealthyBusy`.
+
+Confirm the next session logs `Repo: kaushalavardhanam/kaushalavardhanam` (or your owner/repo), not `(repo unavailable)`. The adapter now passes `--label repo=...` from `WORKER_REPOSITORY_URL` and sets `safe.directory` so the CLI can read origin on an AgentCore volume. Publish a new image and start a **new** session; a running session does not pick up the image.
+
+The `http code 400, message Bad request syntax ('13')` line is AgentCore sending a non-HTTP probe to port 8080. It is unrelated to pool registration.
+
 ### Worker Directory Is Not A Git Repo
 
 Cursor derives the repo label from the worker directory's git remote, and startup fails without it. The adapter initializes `/mnt/workspace` and sets `origin` to `WORKER_REPOSITORY_URL`. If that variable is empty the adapter logs `WORKER_REPOSITORY_URL is unset, skipping git initialization` and the worker will fail to register.
