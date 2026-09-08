@@ -13,15 +13,14 @@ flowchart LR
   CA[Cursor Cloud Agents]
   GHA[GitHub Actions]
 
-  subgraph CFG["1. Configure"]
-    OP
+  subgraph CFG["Configure"]
     GH
   end
-  subgraph CRED["2. Create and export credentials"]
+  subgraph CRED["Create and export credentials"]
     SM
     ECR
   end
-  subgraph RUN["3. Run"]
+  subgraph RUN["Run"]
     subgraph VPC["VPC egress only"]
       RT
       EC2
@@ -31,8 +30,8 @@ flowchart LR
     GHA
   end
 
-  OP -.->|1 copy workflow + .github/scripts| GH
-  OP -.->|2 grant GitHub App| CA
+  OP -->|1 copy workflow + .github/scripts| GH
+  OP -->|2 grant GitHub App| GH
   OP -.->|3 put-secret| SM
   OP -.->|4 push image| ECR
   OP -.->|5 gh secret set| GH

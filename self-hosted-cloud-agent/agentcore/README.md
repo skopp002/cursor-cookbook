@@ -47,7 +47,7 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 
 ![Self-hosted Cloud Agents on AgentCore](diagrams/architecture.png)
 
-Dashed edges (1–5) are configure and credentials. Step 1 copies the static templates in `github/` into the sample app (`.github/workflows/` and `.github/scripts/kick_cursor_agent.py`); the cookbook does not generate those files. Solid edges (6–14) are run.
+The Operator sits outside the lanes. Configure is the sample repo (steps 1–2). Credentials is Secrets Manager and ECR (steps 3–5). Run is the session, registration, kickoff, and PR (steps 6–14). Step 1 copies the static templates in `github/` into the sample app (`.github/workflows/` and `.github/scripts/kick_cursor_agent.py`); the cookbook does not generate those files.
 
 Detailed runbook (how to `export` / `.env` each variable, where it lands, and the 15-step commands): [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png). Command sequence: [`terraform/README.md`](terraform/README.md).
 

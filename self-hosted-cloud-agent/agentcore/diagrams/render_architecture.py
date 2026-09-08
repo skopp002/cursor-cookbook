@@ -34,8 +34,8 @@ def main() -> None:
         "bgcolor": "white",
         "pad": "0.55",
         "splines": "spline",
-        "nodesep": "0.8",
-        "ranksep": "1.0",
+        "nodesep": "0.85",
+        "ranksep": "1.05",
         "fontname": "Helvetica",
         "labeljust": "l",
         "compound": "true",
@@ -52,15 +52,16 @@ def main() -> None:
         node_attr=node_attr,
         edge_attr=edge_attr,
     ):
-        with Cluster("1. Configure"):
-            operator = User("Operator")
+        operator = User("Operator")
+
+        with Cluster("Configure"):
             github = Github("Sample app repo")
 
-        with Cluster("2. Create and export credentials"):
+        with Cluster("Create and export credentials"):
             secrets = SecretsManager("Secrets Manager")
             ecr = EC2ContainerRegistry("Amazon ECR")
 
-        with Cluster("3. Run"):
+        with Cluster("Run"):
             with Cluster("VPC  (egress only)"):
                 runtime = Bedrock("AgentCore Runtime")
                 instance = EC2("Managed instance")
@@ -68,11 +69,11 @@ def main() -> None:
             cursor = InternetAlt1("Cursor Cloud Agents")
             actions = GithubActions("GitHub Actions")
 
-        # Configure: static templates in agentcore/github/, copied by hand
-        operator >> Edge(label="1  copy workflow + .github/scripts", style="dashed", color="#7B8794") >> github
-        operator >> Edge(label="2  grant GitHub App", style="dashed", color="#7B8794") >> cursor
+        # Configure
+        operator >> Edge(label="1  copy workflow + .github/scripts") >> github
+        operator >> Edge(label="2  grant GitHub App") >> github
 
-        # Credentials: laptop .env/export, then land the values
+        # Credentials
         operator >> Edge(label="3  put-secret", style="dashed", color="#7B8794") >> secrets
         operator >> Edge(label="4  push image", style="dashed", color="#7B8794") >> ecr
         operator >> Edge(label="5  gh secret set", style="dashed", color="#7B8794") >> github
