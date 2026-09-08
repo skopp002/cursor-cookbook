@@ -4,7 +4,7 @@ This is the implementation runbook for the Amazon Bedrock AgentCore Runtime **In
 
 For the architecture, operating model, validation expectations, and troubleshooting guide, see [`../README.md`](../README.md). For the design rationale, citations, and open questions, see [`../REQUIREMENTS.md`](../REQUIREMENTS.md).
 
-Run all commands from `self-hosted-cloud-agent/agentcore`. This target is self-contained and does not read the parent `.env` or `Makefile`.
+Run all commands from `self-hosted-cloud-agent/agentcore`, or `make agentcore-<target>` from `self-hosted-cloud-agent/`. This target is self-contained and reads `agentcore/.env`, not the parent `.env`.
 
 **This runbook has not been executed against a live AWS account.** Steps 1 through 4 have been validated locally. Steps 5 onward create real resources and are written from the AWS documentation; treat the first run as a validation exercise and expect to resolve the open questions in [`../REQUIREMENTS.md`](../REQUIREMENTS.md) along the way.
 

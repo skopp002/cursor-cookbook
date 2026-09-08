@@ -4,7 +4,7 @@ Use this README to understand the Amazon Bedrock AgentCore Runtime **Instances**
 
 Read [`REQUIREMENTS.md`](REQUIREMENTS.md) first if you want the design rationale, the citations behind every AWS claim, and the open questions. Nothing in this target has been deployed against a live AWS account.
 
-This target is **self-contained**: it has its own `.env.example` and `Makefile`, and its Docker build context is this directory. Run every command from `self-hosted-cloud-agent/agentcore`, not from the repository root.
+This target is **self-contained**: it has its own `.env.example` and `Makefile`, and its Docker build context is this directory. Run commands from `self-hosted-cloud-agent/agentcore`, or `make agentcore-<target>` from `self-hosted-cloud-agent/` (that still reads `agentcore/.env`, not the parent `.env`).
 
 ## When To Use AgentCore Instances
 
@@ -21,6 +21,44 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 - [`diagrams/architecture.png`](diagrams/architecture.png): simple component diagram (official AWS and GitHub icons, labeled edges). Regenerate with `python3 diagrams/render_architecture.py`.
 - [`terraform/README.md`](terraform/README.md): command runbook — `.env` / `export`, Terraform, image publishing, session lifecycle, key rotation, and cleanup.
 - [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): detailed secrets and env-var runbook (laptop `export`, GitHub Actions secrets, Terraform runtime env, adapter `GetSecretValue`, and the 15-step commands). Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
+
+## Quick Start
+
+Run from `self-hosted-cloud-agent/agentcore`. The same `make agentcore-*` targets also work from `self-hosted-cloud-agent/`. Prerequisites, variable meanings, and validation live in [`terraform/README.md`](terraform/README.md).
+
+1. Copy the GitHub templates into the application repository the worker should clone and PR against (not this cookbook), then grant the Cursor GitHub App access to that repo:
+
+```bash
+mkdir -p <app>/.github/workflows <app>/.github/scripts
+cp github/cursor-agent-in-progress.yml <app>/.github/workflows/
+cp github/kick_cursor_agent.py <app>/.github/scripts/
+```
+
+2. Configure `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Fill in AWS credentials, a Cursor **service account** API key, the pool name, and `WORKER_REPOSITORY_URL` for that application repo.
+
+3. Apply infrastructure, upload the key, push the image, and start a session:
+
+```bash
+make agentcore-terraform-init
+make agentcore-terraform-apply
+make agentcore-put-api-key-secret
+make agentcore-ecr-build-push
+make agentcore-start-session
+```
+
+Record the session ID the last command prints, then put it in `.env` (or export it) so later targets know which session to use:
+
+```bash
+export AGENTCORE_SESSION_ID=cursor-worker-<uuid>
+```
+
+4. Confirm the worker is up (`make agentcore-session-status` should show `"status": "HealthyBusy"`), then select the pool in Cursor Cloud Agents and dispatch a task.
 
 ## The Design Problem In One Paragraph
 
@@ -283,38 +321,3 @@ make agentcore-list-instances
 ```
 
 Because this lab sets the ECR repository to force-delete, Terraform can remove the repository even if it contains demo images.
-
-## Suggested Parent Integration
-
-All assets for this target live in this directory, so the shared files at `self-hosted-cloud-agent/` are unchanged. If you want this target discoverable from the top level, apply these three edits by hand.
-
-Add a row to the table in [`../README.md`](../README.md):
-
-```markdown
-| AgentCore Runtime | [`agentcore/README.md`](agentcore/README.md) | [`agentcore/terraform/README.md`](agentcore/terraform/README.md) |
-```
-
-and a bullet to the list below it:
-
-```markdown
-- AgentCore Runtime is the Amazon Bedrock AgentCore path, for customers standardizing agent workloads on AgentCore. Sessions run up to 14 days on EC2 instances in your account with a persistent EBS workspace, but there is no service abstraction: a worker exists only after `InvokeAgentRuntime`.
-```
-
-Add a delegating target to [`../Makefile`](../Makefile):
-
-```makefile
-agentcore-%:
-	$(MAKE) -C agentcore $@
-```
-
-That works because this target's Makefile uses the same `agentcore-` prefix. It reads `agentcore/.env`, not the parent `.env`.
-
-Add a pointer to [`../.env.example`](../.env.example):
-
-```bash
-# ---------------------------------------------------------------------------
-# AgentCore Runtime approach
-# ---------------------------------------------------------------------------
-
-# This target is self-contained. See agentcore/.env.example.
-```
