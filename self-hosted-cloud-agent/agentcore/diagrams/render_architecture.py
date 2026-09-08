@@ -34,7 +34,7 @@ def main() -> None:
         "labeljust": "l",
     }
     node_attr = {"fontsize": "11", "fontname": "Helvetica"}
-    edge_attr = {"fontsize": "10", "fontname": "Helvetica", "color": "#545B64"}
+    edge_attr = {"fontsize": "11", "fontname": "Helvetica", "color": "#545B64"}
 
     with Diagram(
         "Self-hosted Cloud Agents on AgentCore",
@@ -58,19 +58,19 @@ def main() -> None:
                 instance = EC2("Managed instance")
                 volume = ElasticBlockStoreEBS("EBS /mnt/workspace")
 
-        operator >> Edge(label="put-secret", style="dashed", color="#7B8794") >> secrets
-        operator >> Edge(label="push image", style="dashed", color="#7B8794") >> ecr
-        operator >> Edge(label="InvokeAgentRuntime") >> runtime
+        operator >> Edge(label="1  put-secret", style="dashed", color="#7B8794") >> secrets
+        operator >> Edge(label="2  push image", style="dashed", color="#7B8794") >> ecr
+        operator >> Edge(label="3  InvokeAgentRuntime") >> runtime
 
-        secrets >> Edge(label="GetSecretValue") >> instance
-        ecr >> Edge(label="pull image") >> instance
-        volume >> Edge(label="mount workspace") >> instance
-        runtime >> Edge(label="start session") >> instance
+        runtime >> Edge(label="4  start session") >> instance
+        ecr >> Edge(label="5  pull image") >> instance
+        secrets >> Edge(label="6  GetSecretValue") >> instance
+        volume >> Edge(label="7  mount workspace") >> instance
 
-        instance >> Edge(label="outbound HTTPS") >> cursor
-        github >> Edge(label="workflow") >> actions
-        actions >> Edge(label="POST /v1/agents") >> cursor
-        cursor >> Edge(label="GitHub App PR") >> github
+        instance >> Edge(label="8  outbound HTTPS") >> cursor
+        github >> Edge(label="9  workflow") >> actions
+        actions >> Edge(label="10  POST /v1/agents") >> cursor
+        cursor >> Edge(label="11  GitHub App PR") >> github
 
 
 if __name__ == "__main__":

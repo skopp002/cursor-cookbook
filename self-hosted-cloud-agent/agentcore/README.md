@@ -47,7 +47,7 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 
 ![Self-hosted Cloud Agents on AgentCore](diagrams/architecture.png)
 
-Dashed edges are setup (secrets and image). Solid edges are session start, registration, kickoff, and the PR.
+Dashed edges (1–2) are setup. Solid edges (3–11) are session start, registration, kickoff, and the PR.
 
 Detailed runbook (how to `export` / `.env` each variable, where it lands, and the 15-step commands): [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png). Command sequence: [`terraform/README.md`](terraform/README.md).
 
