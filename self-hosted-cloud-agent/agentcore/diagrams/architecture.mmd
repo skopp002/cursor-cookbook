@@ -1,33 +1,47 @@
 %% Simple component view. Render PNG: python3 diagrams/render_architecture.py
+%% Cookbook github/ is a static template, not generated. Copy:
+%%   github/cursor-agent-in-progress.yml -> <app>/.github/workflows/
+%%   github/kick_cursor_agent.py         -> <app>/.github/scripts/kick_cursor_agent.py
 flowchart LR
   OP[Operator]
+  GH[Sample app repo]
   SM[Secrets Manager]
   ECR[Amazon ECR]
   RT[AgentCore Runtime]
   EC2[Managed instance]
   EBS[EBS /mnt/workspace]
   CA[Cursor Cloud Agents]
-  GH[Sample app repo]
   GHA[GitHub Actions]
 
-  subgraph AWS["AWS account us-west-2"]
+  subgraph CFG["1. Configure"]
+    OP
+    GH
+  end
+  subgraph CRED["2. Create and export credentials"]
     SM
     ECR
+  end
+  subgraph RUN["3. Run"]
     subgraph VPC["VPC egress only"]
       RT
       EC2
       EBS
     end
+    CA
+    GHA
   end
 
-  OP -.->|1 put-secret| SM
-  OP -.->|2 push image| ECR
-  OP -->|3 InvokeAgentRuntime| RT
-  RT -->|4 start session| EC2
-  ECR -->|5 pull image| EC2
-  SM -->|6 GetSecretValue| EC2
-  EBS -->|7 mount workspace| EC2
-  EC2 -->|8 outbound HTTPS| CA
-  GH -->|9 workflow| GHA
-  GHA -->|10 POST /v1/agents| CA
-  CA -->|11 GitHub App PR| GH
+  OP -.->|1 copy workflow + .github/scripts| GH
+  OP -.->|2 grant GitHub App| CA
+  OP -.->|3 put-secret| SM
+  OP -.->|4 push image| ECR
+  OP -.->|5 gh secret set| GH
+  OP -->|6 InvokeAgentRuntime| RT
+  RT -->|7 start session| EC2
+  ECR -->|8 pull image| EC2
+  SM -->|9 GetSecretValue| EC2
+  EBS -->|10 mount workspace| EC2
+  EC2 -->|11 outbound HTTPS| CA
+  GH -->|12 workflow| GHA
+  GHA -->|13 POST /v1/agents| CA
+  CA -->|14 GitHub App PR| GH
