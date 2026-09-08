@@ -336,10 +336,10 @@ Plan those changes as migrations. Confirm the plan shows a replacement before ap
 
 ## 16. Clean Up
 
-Stop each session you started, then destroy:
+Stop each session you started. `make agentcore-stop-session` only stops the agent runtime; the managed EC2 instance stays until `IdleInstanceTimeout` (900s here) or until you delete the capacity-provider session:
 
 ```bash
-make agentcore-stop-session SESSION_ID=<session-id>
+make agentcore-delete-session SESSION_ID=<session-id>
 make agentcore-terraform-destroy
 ```
 

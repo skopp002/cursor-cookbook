@@ -141,7 +141,8 @@ There is no service and no autoscaling loop. The unit of work is a **session**, 
 ```bash
 make agentcore-start-session      # invokes the runtime, prints a session ID
 make agentcore-session-status     # reports the worker state from inside the session
-make agentcore-stop-session       # ends the session, releases the instance
+make agentcore-stop-session       # stops the agent runtime; the EC2 instance stays
+make agentcore-delete-session     # terminates the instance and deletes the workspace volume
 make agentcore-list-instances     # the closest thing to listing sessions
 ```
 
@@ -149,7 +150,7 @@ Two properties of this model matter in practice.
 
 **Sessions cannot be listed.** Session IDs are values you supply on invocation, and there is no operation that lists the sessions on a capacity provider. Record the ID that `agentcore-start-session` prints — put it in `.env` as `AGENTCORE_SESSION_ID`. If you lose it, `make agentcore-list-instances` finds the managed instances backing live sessions, but managed instances are hidden from default EC2 views, which is why that target passes `--include-managed-resources`.
 
-**Invoking an existing session ID routes to the same instance,** and restarts it if it was stopped. That is what makes the persistent workspace useful, and it also means `agentcore-session-status` will wake a stopped session. Use it only on sessions you want running.
+**Invoking an existing session ID routes to the same instance,** and restarts it if it was stopped with `StopRuntimeSession`. That is what makes the persistent workspace useful, and it also means `agentcore-session-status` will wake a stopped session. Use it only on sessions you want running. `make agentcore-delete-session` is different: it calls `DeleteCapacityProviderSession`, which terminates the instance and deletes the volume. That session ID cannot be reused.
 
 To scale to N workers, invoke N distinct session IDs. Each gets its own instance and its own workspace volume.
 
@@ -208,6 +209,18 @@ Pool: <pool-name>
 The keepalive itself is only proven by time: leave a session idle for more than 15 minutes and confirm it is still running.
 
 ## Troubleshooting
+
+### Instances Still Appear After `agentcore-stop-session`
+
+Expected. `StopRuntimeSession` stops the worker inside the session. On Instances the EC2 box stays until `IdleInstanceTimeout` (900 seconds in this lab) or until you delete the capacity-provider session:
+
+```bash
+make agentcore-delete-session SESSION_ID="$AGENTCORE_SESSION_ID"
+```
+
+That call is asynchronous. `make agentcore-list-instances` should drop to `[]` once the instance reaches `terminated`. Each extra instance is a different session ID; delete each one, or `make agentcore-terraform-destroy` if you no longer have the IDs.
+
+Deleting a session also deletes its persistent EBS volume. The session ID cannot be reused. Use stop-then-start with the same ID only when you want to keep `/mnt/workspace`.
 
 ### The Session Dies At Exactly 15 Minutes
 
@@ -316,7 +329,8 @@ AgentCore Runtime Instances is available in us-east-1, us-east-2, us-west-2, eu-
 ## Cleanup
 
 ```bash
-make agentcore-stop-session       # for each session ID you started
+make agentcore-stop-session       # for each session ID you started; does not kill EC2
+make agentcore-delete-session     # for each session ID; terminates the instance and volume
 make agentcore-terraform-destroy
 ```
 

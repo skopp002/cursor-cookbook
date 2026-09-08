@@ -29,6 +29,19 @@ require_runtime_arn() {
   fi
 }
 
+# Reads CAPACITY_PROVIDER_ID from the environment, falling back to Terraform state.
+require_capacity_provider_id() {
+  if [[ -z "${CAPACITY_PROVIDER_ID:-}" ]]; then
+    CAPACITY_PROVIDER_ID="$(terraform_output capacity_provider_id)"
+  fi
+
+  if [[ -z "${CAPACITY_PROVIDER_ID}" ]]; then
+    echo "CAPACITY_PROVIDER_ID is not set and could not be read from ${TERRAFORM_DIR}." >&2
+    echo "Run 'make agentcore-terraform-apply', or export CAPACITY_PROVIDER_ID yourself." >&2
+    exit 1
+  fi
+}
+
 # Session IDs must be at least 33 characters. A UUID suffix keeps that guaranteed and
 # keeps two operators from colliding on the same session.
 new_session_id() {
