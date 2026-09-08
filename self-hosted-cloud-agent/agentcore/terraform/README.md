@@ -39,7 +39,7 @@ Capacity providers are a recent addition. Confirm your CLI knows about them:
 aws bedrock-agentcore-control help | grep capacity-provider
 ```
 
-If that prints nothing, upgrade with `brew upgrade awscli`. Terraform reaches the API through Cloud Control and does not need those commands, but the validation steps below do.
+If that prints nothing, upgrade with `brew upgrade awscli`. `delete-capacity-provider-session` is also recent; an older CLI reports `Found invalid choice`. The lab script signs the REST call in that case. Terraform reaches the API through Cloud Control and does not need those commands, but the validation steps below do.
 
 Also confirm the service-linked role exists, or that you can create it. AgentCore uses `AWSServiceRoleForBedrockAgentCoreRuntimeInstances` to manage the EC2 instances; its policy is not restricted by service control policies.
 

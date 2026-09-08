@@ -22,9 +22,7 @@ echo "Capacity provider: ${CAPACITY_PROVIDER_ID}"
 echo "This terminates the managed EC2 instance and deletes the persistent workspace volume."
 echo
 
-aws_cli bedrock-agentcore delete-capacity-provider-session \
-  --capacity-provider-id "${CAPACITY_PROVIDER_ID}" \
-  --session-id "${SESSION_ID}"
+delete_capacity_provider_session "${CAPACITY_PROVIDER_ID}" "${SESSION_ID}"
 
 echo
 echo "Delete requested (asynchronous). The instance may sit in shutting-down for a minute."

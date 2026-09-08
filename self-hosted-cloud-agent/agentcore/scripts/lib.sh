@@ -90,3 +90,43 @@ invoke_runtime() {
   cat "${response_file}"
   printf '\n'
 }
+
+# Load AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN for a signed REST call.
+export_aws_credentials() {
+  local tmpfile
+  tmpfile="$(mktemp)"
+  aws configure export-credentials --profile "${AWS_PROFILE}" --format env-no-export >"${tmpfile}"
+  set -a
+  # shellcheck disable=SC1090
+  source "${tmpfile}"
+  set +a
+  rm -f "${tmpfile}"
+  export AWS_REGION
+}
+
+# DeleteCapacityProviderSession. Newer AWS CLIs expose the operation; older ones
+# (common on the machine that already talks to AgentCore) do not, so fall back to
+# a SigV4 DELETE against the data-plane endpoint.
+delete_capacity_provider_session() {
+  local provider_id="$1"
+  local session_id="$2"
+
+  if aws_cli bedrock-agentcore delete-capacity-provider-session help >/dev/null 2>&1; then
+    aws_cli bedrock-agentcore delete-capacity-provider-session \
+      --capacity-provider-id "${provider_id}" \
+      --session-id "${session_id}"
+    return
+  fi
+
+  if aws_cli bedrock-agentcore-control delete-capacity-provider-session help >/dev/null 2>&1; then
+    aws_cli bedrock-agentcore-control delete-capacity-provider-session \
+      --capacity-provider-id "${provider_id}" \
+      --session-id "${session_id}"
+    return
+  fi
+
+  echo "This AWS CLI does not know delete-capacity-provider-session; signing the REST call."
+  echo "Upgrade later with: brew upgrade awscli   (need a CLI that lists that operation)."
+  export_aws_credentials
+  python3 "${SCRIPT_DIR}/delete_capacity_provider_session.py" "${provider_id}" "${session_id}"
+}
