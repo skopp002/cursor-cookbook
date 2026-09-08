@@ -19,7 +19,7 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 - This README: architecture, resource summary, security model, operations, validation, and troubleshooting.
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): the design problem, functional and non-functional requirements, IAM roles, quotas, acceptance criteria, and open questions.
 - [`terraform/README.md`](terraform/README.md): prerequisites, `.env` setup, Terraform commands, image publishing, session lifecycle, key rotation, and cleanup.
-- [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): who holds which secret, and the 15-step path as a sequence diagram (short codes on the arrows; full wording in the legend). Terraform does not start a worker; the image has no Git credentials. Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
+- [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): how to `export` / `.env` the variables, where each one lands, and the 15-step path with the command for each step. Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
 
 ## The Design Problem In One Paragraph
 
@@ -44,7 +44,7 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 
 ## Architecture
 
-![Who holds which secret, and how kickoff actually runs](diagrams/secrets-and-flow.png)
+![How to set env vars, where they land, and the 15-step path](diagrams/secrets-and-flow.png)
 
 ```text
 Cursor Cloud Agents  ──── outbound HTTPS (worker dials out) ────┐
