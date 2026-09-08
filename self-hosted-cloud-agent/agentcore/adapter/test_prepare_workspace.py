@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Regression tests for prepare_workspace git-remote handling.
+
+The worker image has no Git credentials. A private HTTPS GitHub URL cannot be
+fetched, and that failure must not prevent the worker from launching.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+ADAPTER_PATH = Path(__file__).resolve().parent / "worker_adapter.py"
+
+
+def load_adapter():
+    spec = importlib.util.spec_from_file_location("worker_adapter", ADAPTER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load {ADAPTER_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+adapter = load_adapter()
+
+
+def git(*args: str, cwd: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+class PrepareWorkspaceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp(prefix="agentcore-ws-")
+        self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
+        config = adapter.Config()
+        config.worker_dir = self.tmpdir
+        config.repository_url = ""
+        self.supervisor = adapter.WorkerSupervisor(config, adapter.State())
+
+    def origin_url(self) -> str:
+        result = git("remote", "get-url", "origin", cwd=self.tmpdir)
+        return result.stdout.strip()
+
+    def test_private_https_fetch_failure_is_not_fatal(self) -> None:
+        """Documented private GitHub HTTPS URL: fetch fails, worker still proceeds."""
+        url = "https://github.com/example-org/private-does-not-exist.git"
+        self.supervisor.config.repository_url = url
+
+        self.supervisor.prepare_workspace()
+
+        self.assertTrue(os.path.isdir(os.path.join(self.tmpdir, ".git")))
+        self.assertEqual(self.origin_url(), url)
+        probe = subprocess.run(
+            ["git", "-C", self.tmpdir, "rev-parse", "--verify", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(
+            probe.returncode, 0, "no checkout is expected without credentials"
+        )
+
+    def test_ssh_github_url_is_rewritten_and_fetch_failure_is_not_fatal(self) -> None:
+        self.supervisor.config.repository_url = "git@github.com:example-org/private.git"
+
+        self.supervisor.prepare_workspace()
+
+        self.assertEqual(
+            self.origin_url(), "https://github.com/example-org/private.git"
+        )
+
+    def test_public_local_remote_is_fetched_and_checked_out(self) -> None:
+        """When the remote is reachable without credentials, fetch still happens."""
+        bare = tempfile.mkdtemp(prefix="agentcore-bare-")
+        self.addCleanup(shutil.rmtree, bare, ignore_errors=True)
+        seed = tempfile.mkdtemp(prefix="agentcore-seed-")
+        self.addCleanup(shutil.rmtree, seed, ignore_errors=True)
+
+        git("init", "--bare", cwd=bare)
+        git("clone", bare, seed, cwd="/")
+        git("checkout", "-B", "main", cwd=seed)
+        git(
+            "-c",
+            "user.email=lab@example.com",
+            "-c",
+            "user.name=Lab",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "seed",
+            cwd=seed,
+        )
+        git("push", "origin", "HEAD:main", cwd=seed)
+
+        self.supervisor.config.repository_url = bare
+        self.supervisor.prepare_workspace()
+
+        self.assertEqual(self.origin_url(), bare)
+        branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.tmpdir).stdout.strip()
+        self.assertEqual(branch, "main")
+        head = git("rev-parse", "--verify", "HEAD", cwd=self.tmpdir)
+        self.assertEqual(head.returncode, 0)
+
+    def test_unset_url_skips_git_initialization(self) -> None:
+        self.supervisor.config.repository_url = ""
+        self.supervisor.prepare_workspace()
+        self.assertFalse(os.path.exists(os.path.join(self.tmpdir, ".git")))
+
+    def test_failed_fetch_does_not_mark_supervisor_startup_failed(self) -> None:
+        """run() must reach worker launch even when origin cannot be fetched."""
+        self.supervisor.config.repository_url = (
+            "https://github.com/example-org/private-does-not-exist.git"
+        )
+        self.supervisor.config.api_key = "test-service-account-key"
+        self.supervisor.config.max_restarts = 0
+
+        launched = []
+
+        class FakeProcess:
+            pid = 4242
+
+            def wait(self, timeout=None):
+                return 0
+
+            def terminate(self):
+                return None
+
+            def kill(self):
+                return None
+
+        original = adapter.subprocess.Popen
+
+        def fake_popen(*args, **kwargs):
+            command = args[0] if args else kwargs.get("args")
+            if isinstance(command, (list, tuple)) and command and command[0] == "agent":
+                launched.append(
+                    {
+                        "command": command,
+                        "cwd": kwargs.get("cwd"),
+                        "env_has_key": "CURSOR_API_KEY" in (kwargs.get("env") or {}),
+                    }
+                )
+                return FakeProcess()
+            return original(*args, **kwargs)
+
+        adapter.subprocess.Popen = fake_popen  # type: ignore[method-assign]
+        try:
+            self.supervisor.run()
+        finally:
+            adapter.subprocess.Popen = original  # type: ignore[method-assign]
+
+        self.assertEqual(len(launched), 1, "worker must still be launched after fetch failure")
+        self.assertEqual(launched[0]["cwd"], self.tmpdir)
+        snapshot = self.supervisor.state.snapshot()
+        self.assertIsNone(
+            snapshot["last_error"],
+            "fetch failure must not mark startup failed",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

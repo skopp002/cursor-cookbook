@@ -75,14 +75,16 @@ define with_aws_credentials
 	set -a; source "$$tmpfile"; set +a; rm -f "$$tmpfile";
 endef
 
-.PHONY: help agentcore-docker-build agentcore-contract-test agentcore-ecr-login \
-	agentcore-ecr-build-push agentcore-put-api-key-secret agentcore-terraform-init \
-	agentcore-terraform-fmt agentcore-terraform-validate agentcore-terraform-plan \
-	agentcore-terraform-apply agentcore-terraform-destroy agentcore-start-session \
-	agentcore-session-status agentcore-stop-session agentcore-list-instances agentcore-logs
+.PHONY: help agentcore-adapter-test agentcore-docker-build agentcore-contract-test \
+	agentcore-ecr-login agentcore-ecr-build-push agentcore-put-api-key-secret \
+	agentcore-terraform-init agentcore-terraform-fmt agentcore-terraform-validate \
+	agentcore-terraform-plan agentcore-terraform-apply agentcore-terraform-destroy \
+	agentcore-start-session agentcore-session-status agentcore-stop-session \
+	agentcore-list-instances agentcore-logs
 
 help:
 	@echo "Targets:"
+	@echo "  agentcore-adapter-test         Run prepare_workspace unit tests (no Docker or AWS)"
 	@echo "  agentcore-docker-build         Build the adapter worker image for $(WORKER_PLATFORM)"
 	@echo "  agentcore-contract-test        Check the adapter against the AgentCore HTTP contract locally"
 	@echo "  agentcore-ecr-login            Authenticate $(CONTAINER_CLI) to ECR"
@@ -99,6 +101,9 @@ help:
 	@echo "  agentcore-stop-session         Stop a session and release its instance"
 	@echo "  agentcore-list-instances       List the managed instances backing sessions"
 	@echo "  agentcore-logs                 Tail the runtime logs"
+
+agentcore-adapter-test:
+	python3 adapter/test_prepare_workspace.py
 
 agentcore-docker-build:
 	@if [[ "$(CONTAINER_CLI)" == *finch ]]; then \

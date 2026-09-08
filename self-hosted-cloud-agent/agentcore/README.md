@@ -19,6 +19,7 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 - This README: architecture, resource summary, security model, operations, validation, and troubleshooting.
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): the design problem, functional and non-functional requirements, IAM roles, quotas, acceptance criteria, and open questions.
 - [`terraform/README.md`](terraform/README.md): prerequisites, `.env` setup, Terraform commands, image publishing, session lifecycle, key rotation, and cleanup.
+- [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): who holds which secret, and the 15-step runtime path (Terraform does not start a worker; the image has no Git credentials). Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
 
 ## The Design Problem In One Paragraph
 
@@ -42,6 +43,8 @@ Terraform does **not** create a session. Sessions come into existence only when 
 The capacity provider and agent runtime are managed through `aws_cloudcontrolapi_resource` rather than native resources. `hashicorp/aws` has no capacity provider resource and no `capacity_provider_configuration` on its runtime resource; `hashicorp/awscc` has the capacity provider but a stale runtime schema. Both CloudFormation types are public and live with all five handlers, so Cloud Control API reaches the current schema at apply time. See §10 of [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
 ## Architecture
+
+![Who holds which secret, and how kickoff actually runs](diagrams/secrets-and-flow.png)
 
 ```text
 Cursor Cloud Agents  ──── outbound HTTPS (worker dials out) ────┐
@@ -67,7 +70,7 @@ Operator ── InvokeAgentRuntime ──▶ AgentCore Runtime           │
 
 1. Starts the HTTP listener **before** the worker, so `/ping` answers immediately.
 2. Reads the Cursor service account key from Secrets Manager with the runtime execution role.
-3. Initializes `/mnt/workspace` as a git repository with `origin` set to `WORKER_REPOSITORY_URL`, idempotently, because the volume persists across session restarts and will already be initialized on the second start.
+3. Initializes `/mnt/workspace` as a git repository with `origin` set to `WORKER_REPOSITORY_URL`, idempotently, because the volume persists across session restarts and will already be initialized on the second start. Fetch and checkout are attempted but not required: the image has no Git credentials, so a private HTTPS remote must not block worker startup.
 4. Forks `agent worker --pool ... start`, with the options before the `start` subcommand.
 5. Reports `HealthyBusy` while that child is alive, and restarts it with backoff if it exits unexpectedly.
 
@@ -256,7 +259,9 @@ The worker options belong before the `start` subcommand. `build_command()` in th
 
 Cursor derives the repo label from the worker directory's git remote, and startup fails without it. The adapter initializes `/mnt/workspace` and sets `origin` to `WORKER_REPOSITORY_URL`. If that variable is empty the adapter logs `WORKER_REPOSITORY_URL is unset, skipping git initialization` and the worker will fail to register.
 
-Because the volume persists, a session that once had the wrong remote keeps it. The adapter removes and re-adds `origin` on every start so a stale remote converges.
+Because the volume persists, a session that once had the wrong remote keeps it. The adapter resets `origin` on every start so a stale remote converges.
+
+A failed `git fetch` is not fatal. The image has no Git credentials, so a private `https://github.com/...` URL cannot be cloned at startup. Sibling EC2, ECS, and EKS targets only set the remote; this adapter matches that contract and still launches `agent worker`. Clone the repo with `--clone-git-repos` (and a minted GitHub token) if the agent needs a full checkout.
 
 ### Cloud Agents Cannot Access The Repo
 

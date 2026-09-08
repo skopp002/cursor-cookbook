@@ -338,14 +338,24 @@ class WorkerSupervisor:
         self._git("checkout", "--force", "-B", branch, start)
         log(f"checked out origin/{branch}")
 
+    def _log_workspace_ready(self) -> None:
+        origin = self._git("remote", "get-url", "origin").stdout.strip()
+        branch = self._git("rev-parse", "--abbrev-ref", "HEAD", check=False)
+        if branch.returncode == 0 and branch.stdout.strip():
+            log(f"workspace ready: {origin} @ {branch.stdout.strip()}")
+            return
+        log(f"workspace ready: {origin} (origin set, no local HEAD)")
+
     def prepare_workspace(self) -> None:
-        """Clone WORKER_REPOSITORY_URL into the persistent workspace.
+        """Set origin to WORKER_REPOSITORY_URL on the persistent workspace.
 
-        Cursor derives the repo label from origin plus a real HEAD. An empty `git init`
-        with only a remote set advertises `Repo: (repo unavailable)` and Cloud Agents
-        cannot attach the GitHub repo or open PRs against it.
+        Cursor derives the repo label from the origin remote. Sibling EC2, ECS, and
+        EKS targets only set that remote: the worker image has no Git credentials, so
+        a private HTTPS GitHub URL cannot be fetched and must not block startup.
 
-        Idempotent: a later session on the same EBS volume fetches instead of recloning.
+        Fetch and checkout are best-effort. When they succeed (public repo, or a later
+        session whose EBS volume already has objects), the workspace gets a real HEAD.
+        Fetch failure is logged and the worker still launches.
         """
         worker_dir = self.config.worker_dir
         os.makedirs(worker_dir, exist_ok=True)
@@ -373,23 +383,42 @@ class WorkerSupervisor:
         log(f"git origin set to {url}")
 
         log(f"fetching {url}")
-        self._git(
-            "fetch",
-            "--prune",
-            "origin",
-            "+refs/heads/*:refs/remotes/origin/*",
-            timeout=600,
-        )
+        try:
+            fetched = self._git(
+                "fetch",
+                "--prune",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                check=False,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            log(
+                "git fetch timed out; continuing with origin only so the worker can launch"
+            )
+            self._log_workspace_ready()
+            return
+
+        if fetched.returncode != 0:
+            detail = (fetched.stderr or fetched.stdout).strip() or f"exit {fetched.returncode}"
+            log(
+                f"git fetch failed ({detail}); continuing with origin only. "
+                "The worker image has no Git credentials, so private HTTPS remotes "
+                "cannot be cloned here. Sibling targets only set the remote."
+            )
+            self._log_workspace_ready()
+            return
 
         head = self._git("rev-parse", "--verify", "HEAD", check=False)
         if head.returncode != 0:
-            self._checkout_origin_head()
+            try:
+                self._checkout_origin_head()
+            except RuntimeError as exc:
+                log(f"checkout after fetch failed: {exc}; continuing with origin only")
         else:
             log(f"workspace HEAD is {head.stdout.strip()[:12]}")
 
-        origin = self._git("remote", "get-url", "origin").stdout.strip()
-        branch = self._git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        log(f"workspace ready: {origin} @ {branch}")
+        self._log_workspace_ready()
 
     def resolve_labels_file(self) -> str | None:
         """Write CURSOR_WORKER_LABELS_JSON to a file if provided, else use the baked file."""
