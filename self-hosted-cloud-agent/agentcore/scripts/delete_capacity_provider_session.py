@@ -97,6 +97,8 @@ def main() -> int:
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         print(f"HTTP {exc.code}: {detail}", file=sys.stderr)
+        if exc.code == 404:
+            return 0
         return 1
 
 

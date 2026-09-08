@@ -80,7 +80,8 @@ endef
 	agentcore-terraform-init agentcore-terraform-fmt agentcore-terraform-validate \
 	agentcore-terraform-plan agentcore-terraform-apply agentcore-terraform-destroy \
 	agentcore-start-session agentcore-session-status agentcore-stop-session \
-	agentcore-delete-session agentcore-list-instances agentcore-logs
+	agentcore-delete-session agentcore-delete-listed-sessions \
+	agentcore-list-instances agentcore-logs
 
 help:
 	@echo "Targets:"
@@ -100,6 +101,7 @@ help:
 	@echo "  agentcore-session-status       Report the worker state inside a session"
 	@echo "  agentcore-stop-session         Stop the agent runtime (instance stays until idle timeout)"
 	@echo "  agentcore-delete-session       Delete the session and terminate its EC2 instance and volume"
+	@echo "  agentcore-delete-listed-sessions  Delete every session tagged on live managed instances"
 	@echo "  agentcore-list-instances       List the managed instances backing sessions"
 	@echo "  agentcore-logs                 Tail the runtime logs"
 
@@ -186,6 +188,9 @@ agentcore-stop-session:
 
 agentcore-delete-session:
 	scripts/delete-session.sh $(SESSION_ID)
+
+agentcore-delete-listed-sessions:
+	scripts/delete-listed-sessions.sh
 
 agentcore-list-instances:
 	scripts/list-instances.sh

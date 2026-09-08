@@ -106,27 +106,42 @@ export_aws_credentials() {
 
 # DeleteCapacityProviderSession. Newer AWS CLIs expose the operation; older ones
 # (common on the machine that already talks to AgentCore) do not, so fall back to
-# a SigV4 DELETE against the data-plane endpoint.
+# a SigV4 DELETE against the data-plane endpoint. ResourceNotFound means this ID
+# is already gone — leftover EC2 boxes use a different runtime-session-id tag.
 delete_capacity_provider_session() {
   local provider_id="$1"
   local session_id="$2"
+  local out rc=0
 
-  if aws_cli bedrock-agentcore delete-capacity-provider-session help >/dev/null 2>&1; then
-    aws_cli bedrock-agentcore delete-capacity-provider-session \
-      --capacity-provider-id "${provider_id}" \
-      --session-id "${session_id}"
-    return
+  run_delete() {
+    if AWS_PAGER="" aws_cli bedrock-agentcore delete-capacity-provider-session help >/dev/null 2>&1; then
+      aws_cli bedrock-agentcore delete-capacity-provider-session \
+        --capacity-provider-id "${provider_id}" \
+        --session-id "${session_id}"
+      return
+    fi
+    if AWS_PAGER="" aws_cli bedrock-agentcore-control delete-capacity-provider-session help >/dev/null 2>&1; then
+      aws_cli bedrock-agentcore-control delete-capacity-provider-session \
+        --capacity-provider-id "${provider_id}" \
+        --session-id "${session_id}"
+      return
+    fi
+    echo "This AWS CLI does not know delete-capacity-provider-session; signing the REST call."
+    export_aws_credentials
+    python3 "${SCRIPT_DIR}/delete_capacity_provider_session.py" "${provider_id}" "${session_id}"
+  }
+
+  set +e
+  out="$(run_delete 2>&1)"
+  rc=$?
+  set -e
+  printf '%s\n' "${out}"
+
+  if [[ "${rc}" -ne 0 ]]; then
+    if printf '%s\n' "${out}" | grep -qi 'ResourceNotFoundException\|HTTP 404'; then
+      echo "CapacityProviderSession ${session_id} is already gone. Leftover instances use a different RuntimeSessionId tag — see make agentcore-list-instances."
+      return 0
+    fi
+    return "${rc}"
   fi
-
-  if aws_cli bedrock-agentcore-control delete-capacity-provider-session help >/dev/null 2>&1; then
-    aws_cli bedrock-agentcore-control delete-capacity-provider-session \
-      --capacity-provider-id "${provider_id}" \
-      --session-id "${session_id}"
-    return
-  fi
-
-  echo "This AWS CLI does not know delete-capacity-provider-session; signing the REST call."
-  echo "Upgrade later with: brew upgrade awscli   (need a CLI that lists that operation)."
-  export_aws_credentials
-  python3 "${SCRIPT_DIR}/delete_capacity_provider_session.py" "${provider_id}" "${session_id}"
 }

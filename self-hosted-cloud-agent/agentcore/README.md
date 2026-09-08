@@ -220,11 +220,14 @@ make agentcore-delete-session SESSION_ID="$AGENTCORE_SESSION_ID"
 
 That call is asynchronous. `make agentcore-list-instances` should drop to `[]` once the instance reaches `terminated`. Each extra instance is a different session ID; delete each one, or `make agentcore-terraform-destroy` if you no longer have the IDs.
 
-If delete-session fails with `Found invalid choice 'delete-capacity-provider-session'`, the AWS CLI is older than the operation. The script signs the same REST DELETE as a fallback. You can also upgrade with `brew upgrade awscli` and confirm with:
+If `delete-session` returns `CapacityProviderSession not found`, that ID is already gone. Leftover EC2 instances are almost always **earlier lab sessions**. AgentCore tags them with `bedrock-agentcore:runtime-session-id`, which is often a bare UUID — not `cursor-worker-<uuid>`. `make agentcore-list-instances` prints `RuntimeSessionId`. Delete that value, or all of them:
 
 ```bash
-aws bedrock-agentcore delete-capacity-provider-session help
+make agentcore-delete-session SESSION_ID=<RuntimeSessionId>
+make agentcore-delete-listed-sessions
 ```
+
+Do not run `make agentcore-session-status` on those old IDs unless you want to wake the session.
 
 Deleting a session also deletes its persistent EBS volume. The session ID cannot be reused. Use stop-then-start with the same ID only when you want to keep `/mnt/workspace`.
 
