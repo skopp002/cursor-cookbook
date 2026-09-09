@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = Path(__file__).with_name("secrets-and-flow.png")
-W, H = 2200, 2040
+W, H = 2200, 2280
 BG = (246, 247, 250)
 INK = (15, 23, 42)
 MUTED = (71, 85, 105)
@@ -25,6 +25,11 @@ FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 MONO_B = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+if not Path(FONT).exists():
+    FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
+    FONT_B = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+    MONO = "/System/Library/Fonts/Supplemental/Courier New.ttf"
+    MONO_B = "/System/Library/Fonts/Supplemental/Courier New Bold.ttf"
 M = 36
 
 
@@ -88,10 +93,10 @@ def main() -> None:
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    d.text((M, 20), "Self-hosted Cloud Agents — secrets, env vars, and the 15-step path", font=fnt(26, True), fill=INK)
+    d.text((M, 20), "Self-hosted Cloud Agents — secrets, env vars, and the numbered path", font=fnt(26, True), fill=INK)
     d.text(
         (M, 56),
-        "Make reads agentcore/.env and exports it. Terraform never stores CURSOR_API_KEY. The worker image has no Git credentials. Cursor never connects into the VPC.",
+        "Make reads agentcore/.env and exports it. Terraform never stores CURSOR_API_KEY. PRs use CURSOR_GIT_TOKEN from Secrets Manager secret cursor-agentcore-worker-git-token, not GH_PROJECT_TOKEN and not the GitHub App. Cursor never connects into the VPC.",
         font=fnt(14),
         fill=MUTED,
     )
@@ -135,10 +140,13 @@ def main() -> None:
             ("cmt", "# AWS for terraform / put-secret / ecr-build-push / start-session"),
             ("cmd", "export AWS_PROFILE=default"),
             ("cmd", "export AWS_REGION=us-west-2"),
-            ("cmd", "export AWS_ACCOUNT_ID='123456789012'"),
+            ("cmd", "export AWS_ACCOUNT_ID='<account-id>'"),
             ("blank", ""),
-            ("cmt", "# GitHub PAT with Projects:Read. Not in agentcore/.env"),
+            ("cmt", "# GitHub PAT with Projects:Read. Kickoff board only — not PRs"),
             ("cmd", "export GH_PROJECT_TOKEN='github_pat_...'"),
+            ("cmt", "# PRs: GitHub PAT uploaded to Secrets Manager"),
+            ("cmd", "export CURSOR_GIT_TOKEN='github_pat_...'"),
+            ("cmd", "export CURSOR_GIT_TOKEN_SECRET_NAME=cursor-agentcore-worker-git-token"),
             ("blank", ""),
             ("cmt", "# after make agentcore-start-session prints the id:"),
             ("cmd", "export AGENTCORE_SESSION_ID='cursor-worker-<uuid>'"),
@@ -156,11 +164,12 @@ def main() -> None:
             "Laptop  — you type it",
             [
                 "CURSOR_API_KEY",
+                "CURSOR_GIT_TOKEN",
                 "WORKER_REPOSITORY_URL",
                 "AWS_PROFILE / REGION / ACCOUNT_ID",
                 "CURSOR_WORKER_POOL_NAME",
                 "CURSOR_API_KEY_SECRET_NAME",
-                "AGENTCORE_SESSION_ID  (after start)",
+                "CURSOR_GIT_TOKEN_SECRET_NAME",
             ],
             "Used by Make and AWS CLI only. Not a file inside the container.",
         ),
@@ -182,16 +191,17 @@ def main() -> None:
         (
             (255, 247, 237),
             AMBER,
-            "AgentCore runtime  — Terraform",
+            "AgentCore runtime  — env + secret names",
             [
-                "CURSOR_API_KEY_SECRET_ID=<secret ARN>",
+                "cursor-agentcore-worker-api-key",
+                "cursor-agentcore-worker-git-token",
                 "WORKER_REPOSITORY_URL=<sample-repo git URL>",
                 "CURSOR_WORKER_POOL_NAME=agentcore-platform-agents",
                 "CURSOR_WORKER_DIR=/mnt/workspace",
                 "CURSOR_WORKER_IDLE_RELEASE_TIMEOUT=600",
                 "CURSOR_WORKER_LABELS_JSON=...",
             ],
-            "Terraform writes the secret ARN, never the raw API key.",
+            "Terraform never stores raw keys. Git token secret is set in Secrets Manager for push/PR.",
         ),
         (
             (238, 242, 255),
@@ -203,14 +213,15 @@ def main() -> None:
                 "",
                 "# adapter then starts the child with:",
                 "export CURSOR_API_KEY='<fetched value>'",
+                "export CURSOR_GIT_TOKEN='<from cursor-agentcore-worker-git-token>'",
                 "agent worker --pool start",
             ],
-            "No Git credentials in the image. origin is WORKER_REPOSITORY_URL only.",
+            "API key from Secrets Manager. Git token from cursor-agentcore-worker-git-token enables git push/PR.",
         ),
     ]
     cg = 16
     card_w = (W - 2 * M - 3 * cg) / 4
-    card_h = 300
+    card_h = 320
     for i, (fill, stroke, title, lines, foot) in enumerate(cards):
         x = M + i * (card_w + cg)
         rr(d, (x, y, x + card_w, y + card_h), fill, stroke, width=2, radius=12)
@@ -225,40 +236,43 @@ def main() -> None:
             fy += 16
     y += card_h + 28
 
-    heading(d, M, y, "3. CURSOR_API_KEY path  (the only secret that is copied)")
+    heading(d, M, y, "3. Two Secrets Manager values  (never Terraform state)")
     y += 30
     key_lines = [
-        ("cmt", "# laptop  →  Secrets Manager   (Terraform does not see the value)"),
-        ("cmd", "make agentcore-put-api-key-secret     # reads $CURSOR_API_KEY from .env"),
+        ("cmt", "# laptop  →  Secrets Manager   (Terraform does not see the values)"),
+        ("cmd", "make agentcore-put-api-key-secret     # $CURSOR_API_KEY → cursor-agentcore-worker-api-key"),
+        ("cmd", "aws secretsmanager put-secret-value --secret-id cursor-agentcore-worker-git-token --secret-string \"$CURSOR_GIT_TOKEN\""),
         ("blank", ""),
-        ("cmt", "# laptop  →  GitHub Actions secrets on the SAMPLE REPO"),
+        ("cmt", "# laptop  →  GitHub Actions secrets on the SAMPLE REPO (kickoff only, not git push)"),
         ("cmd", "gh secret set CURSOR_API_KEY --repo kaushalavardhanam/kaushalavardhanam --body \"$CURSOR_API_KEY\""),
         ("cmd", "gh secret set GH_PROJECT_TOKEN --repo kaushalavardhanam/kaushalavardhanam --body \"$GH_PROJECT_TOKEN\""),
         ("blank", ""),
-        ("cmt", "# runtime: Terraform set CURSOR_API_KEY_SECRET_ID; adapter fetches, then:"),
-        ("cmd", "export CURSOR_API_KEY='<SecretString>'   # injected into `agent worker` only"),
+        ("cmt", "# worker: API key for pool register; git token for push + PR to the sample repo"),
+        ("cmd", "export CURSOR_API_KEY='<api-key secret>'     export CURSOR_GIT_TOKEN='<git-token secret>'"),
     ]
     y += code_block(d, M, y, W - 2 * M, key_lines) + 28
 
-    heading(d, M, y, "4. Fifteen steps  — command on the right, no overlapping connectors")
+    heading(d, M, y, "4. Numbered steps  — command on the right, no overlapping connectors")
     y += 32
 
     steps = [
         (TEAL, "Copy templates", "cp github/cursor-agent-in-progress.yml  github/kick_cursor_agent.py  →  <sample-repo>/.github/"),
-        (TEAL, "Grant GitHub App", "Cursor dashboard: Team GitHub App on the sample repo (PR grant, not a Git credential)"),
+        (TEAL, "Grant GitHub App", "Cursor dashboard: Team GitHub App on the sample repo (routing). Does not push from the worker."),
         (TEAL, "Write .env / export", "cp .env.example .env   &&   export CURSOR_API_KEY=... WORKER_REPOSITORY_URL=... AWS_REGION=..."),
         (TEAL, "Create AWS infra", "make agentcore-terraform-apply     # ECR, secret container, IAM, runtime env. Does not boot a worker"),
         (TEAL, "Push worker image", "make agentcore-ecr-build-push     # linux/arm64 → ECR"),
-        (TEAL, "Put API key secret", "make agentcore-put-api-key-secret     # $CURSOR_API_KEY → Secrets Manager"),
+        (TEAL, "Put API key secret", "make agentcore-put-api-key-secret     # $CURSOR_API_KEY → cursor-agentcore-worker-api-key"),
+        (TEAL, "Put git token secret", "aws secretsmanager put-secret-value --secret-id cursor-agentcore-worker-git-token --secret-string \"$CURSOR_GIT_TOKEN\""),
         (TEAL, "Store Actions secrets", "gh secret set CURSOR_API_KEY --body \"$CURSOR_API_KEY\"   &&   gh secret set GH_PROJECT_TOKEN ..."),
         (TEAL, "Inject workflow env", "CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}     GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}"),
         (AMBER, "Start session + pull", "make agentcore-start-session     &&     export AGENTCORE_SESSION_ID=cursor-worker-<uuid>"),
-        (AMBER, "Fetch API key", "aws secretsmanager get-secret-value --secret-id \"$CURSOR_API_KEY_SECRET_ID\""),
-        (AMBER, "Set git origin", "git remote add origin \"$WORKER_REPOSITORY_URL\"     # fetch best-effort; no Git creds in the image"),
+        (AMBER, "Fetch API key", "aws secretsmanager get-secret-value --secret-id cursor-agentcore-worker-api-key"),
+        (AMBER, "Fetch git token", "aws secretsmanager get-secret-value --secret-id cursor-agentcore-worker-git-token     # CURSOR_GIT_TOKEN"),
+        (AMBER, "Set git origin", "git remote add origin \"$WORKER_REPOSITORY_URL\"     # sample app repo the agent PRs against"),
         (INDIGO, "Register outbound", "agent worker --pool start     # HTTPS out to Cursor. No inbound into the VPC"),
         (INDIGO, "Kick off agent", "Actions POST /v1/agents  pool=agentcore-platform-agents  (Authorization: $CURSOR_API_KEY)"),
-        (INDIGO, "Assign + edit", "Cursor assigns the job on that outbound connection. Edits land on /mnt/workspace"),
-        (INDIGO, "Open PR", "GitHub App opens the PR (autoCreatePR). Uses step 2 grant, not the worker API key"),
+        (INDIGO, "Assign + edit", "Cursor assigns the job. Edits land on /mnt/workspace"),
+        (INDIGO, "Open PR", "Worker git push + autoCreatePR using CURSOR_GIT_TOKEN from cursor-agentcore-worker-git-token"),
     ]
 
     row_h = 56
@@ -273,7 +287,7 @@ def main() -> None:
     y += 8
     d.text(
         (M, y),
-        "You export on the laptop. GitHub gets secrets via gh secret set. The worker gets CURSOR_API_KEY only after GetSecretValue. Terraform never sees the key.",
+        "You export on the laptop. Kickoff uses CURSOR_API_KEY + GH_PROJECT_TOKEN. PRs use CURSOR_GIT_TOKEN from cursor-agentcore-worker-git-token. Terraform never stores those values.",
         font=fnt(13),
         fill=MUTED,
     )
