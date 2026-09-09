@@ -40,6 +40,7 @@ help:
 	@echo "  ec2-terraform-init            Initialize the EC2 Terraform scaffold"
 	@echo "  ec2-terraform-plan            Plan the EC2 Terraform deployment"
 	@echo "  ec2-terraform-apply           Apply the EC2 Terraform deployment"
+	@echo "  agentcore-<target>            Delegate to agentcore/Makefile (reads agentcore/.env)"
 
 docker-build:
 	docker build -f docker/Dockerfile -t "$(WORKER_IMAGE)" .
@@ -91,3 +92,8 @@ ec2-terraform-apply:
 terraform-init: ec2-terraform-init
 
 terraform-plan: ec2-terraform-plan
+
+# AgentCore is self-contained: this forwards agentcore-* to agentcore/Makefile,
+# which reads agentcore/.env rather than this directory's .env.
+agentcore-%:
+	$(MAKE) -C agentcore $@
