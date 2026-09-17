@@ -14,9 +14,16 @@ Copy, do not generate, the templates:
 
 agentcore/.env stays on the cookbook checkout. It is not copied into the sample repo.
 
-Run is the outer operating picture. An AWS rectangle inside Run holds
-Secrets Manager, ECR, and the VPC. Cursor Cloud Agents and GitHub Actions
-stay in Run, outside AWS. The sample repo sits outside Run as the PR target.
+Run is the outer operating picture. An AWS rectangle inside Run holds the
+AgentCore control plane, Secrets Manager, ECR, and the customer VPC.
+
+AgentCore Runtime and its capacity provider are the AWS-managed control plane:
+you call InvokeAgentRuntime on them, and they provision and launch the managed
+EC2 instance into the customer VPC. They are NOT VPC-resident. Only the managed
+instance and its EBS volume live inside the VPC — Instances is VPC-only, and the
+runtime inherits networking from the capacity provider (it takes no
+networkConfiguration). Cursor Cloud Agents and GitHub Actions stay in Run,
+outside AWS. The sample repo sits outside Run as the PR target.
 
 Arrow direction is the direction of the request or artifact:
   secret/image bytes travel toward the managed instance;
@@ -76,11 +83,12 @@ def main() -> None:
 
         with Cluster("Run"):
             with Cluster("AWS"):
+                with Cluster("AgentCore control plane (AWS-managed)"):
+                    runtime = Bedrock("AgentCore Runtime\n+ Capacity Provider")
                 with Cluster("Credentials"):
                     secrets = SecretsManager("Secrets Manager")
                     ecr = EC2ContainerRegistry("Amazon ECR")
-                with Cluster("VPC  (egress only)"):
-                    runtime = Bedrock("AgentCore Runtime")
+                with Cluster("Customer VPC  (egress only)"):
                     instance = EC2("Managed instance")
                     volume = ElasticBlockStoreEBS("EBS /mnt/workspace")
             cursor = InternetAlt1("Cursor Cloud Agents")
@@ -95,7 +103,7 @@ def main() -> None:
         cookbook >> Edge(label="4  push image", **dashed) >> ecr
         operator >> Edge(label="5  gh secret set", **dashed) >> sample
         operator >> Edge(label="6  InvokeAgentRuntime") >> runtime
-        runtime >> Edge(label="7  start session") >> instance
+        runtime >> Edge(label="7  provision + launch instance in VPC") >> instance
         ecr >> Edge(label="8  image pull") >> instance
         secrets >> Edge(label="9  secret values") >> instance
         volume >> Edge(label="10  mount workspace") >> instance

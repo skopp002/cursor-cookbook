@@ -29,6 +29,10 @@ locals {
   # execution role. This is the env var name the adapter looks for.
   secret_id_env_name = "CURSOR_API_KEY_SECRET_ID"
 
+  # Same pattern for the Git write token: the adapter fetches it at boot and configures a git
+  # credential helper so `git push` to https://github.com/... succeeds.
+  git_token_secret_id_env_name = "CURSOR_GIT_TOKEN_SECRET_ID"
+
   vpc_id     = var.vpc_id != null ? var.vpc_id : data.aws_vpc.default[0].id
   subnet_ids = var.subnet_ids != null ? var.subnet_ids : data.aws_subnets.default[0].ids
 
@@ -71,6 +75,9 @@ locals {
 
   cursor_api_key_secret_arn = aws_secretsmanager_secret.cursor_api_key.arn
 
+  # Resolve whether Terraform created the git-token container or it is operator-managed.
+  cursor_git_token_secret_arn = var.create_cursor_git_token_secret ? aws_secretsmanager_secret.cursor_git_token[0].arn : data.aws_secretsmanager_secret.cursor_git_token[0].arn
+
   # Instances runtimes must NOT receive networkConfiguration. They inherit networking from
   # the capacity provider's vpcConfiguration, and passing both fails with ValidationException.
   agent_runtime_desired_state = merge(
@@ -110,13 +117,14 @@ locals {
       }]
 
       EnvironmentVariables = {
-        CURSOR_WORKER_POOL_NAME            = var.worker_pool_name
-        CURSOR_WORKER_IDLE_RELEASE_TIMEOUT = tostring(var.worker_idle_release_timeout)
-        CURSOR_WORKER_DIR                  = local.workspace_mount_path
-        CURSOR_WORKER_LABELS_JSON          = jsonencode(local.worker_labels)
-        WORKER_REPOSITORY_URL              = var.worker_repository_url
-        AGENTCORE_WORKER_MAX_RESTARTS      = tostring(var.worker_max_restarts)
-        (local.secret_id_env_name)         = local.cursor_api_key_secret_arn
+        CURSOR_WORKER_POOL_NAME              = var.worker_pool_name
+        CURSOR_WORKER_IDLE_RELEASE_TIMEOUT   = tostring(var.worker_idle_release_timeout)
+        CURSOR_WORKER_DIR                    = local.workspace_mount_path
+        CURSOR_WORKER_LABELS_JSON            = jsonencode(local.worker_labels)
+        WORKER_REPOSITORY_URL                = var.worker_repository_url
+        AGENTCORE_WORKER_MAX_RESTARTS        = tostring(var.worker_max_restarts)
+        (local.secret_id_env_name)           = local.cursor_api_key_secret_arn
+        (local.git_token_secret_id_env_name) = local.cursor_git_token_secret_arn
       }
     },
     # MetadataConfiguration is NOT in the live AWS::BedrockAgentCore::Runtime schema, and
@@ -171,6 +179,23 @@ resource "aws_secretsmanager_secret" "cursor_api_key" {
   name                    = var.cursor_api_key_secret_name
   description             = "Cursor service account API key for the AgentCore worker demo."
   recovery_window_in_days = var.secret_recovery_window_in_days
+}
+
+# Git write token (fine-grained PAT) the worker uses to push branches so Cursor can open the
+# PR. Self-hosted workers do NOT inherit Cursor's GitHub App token or the Actions
+# GITHUB_TOKEN, so without this the worker cannot push. Terraform creates only the empty
+# container; upload the value out of band (like the API key) so it never enters state.
+# Set create_cursor_git_token_secret=false if the secret already exists and is operator-managed.
+resource "aws_secretsmanager_secret" "cursor_git_token" {
+  count                   = var.create_cursor_git_token_secret ? 1 : 0
+  name                    = var.cursor_git_token_secret_name
+  description             = "Git write token (fine-grained PAT) the AgentCore worker uses to push branches."
+  recovery_window_in_days = var.secret_recovery_window_in_days
+}
+
+data "aws_secretsmanager_secret" "cursor_git_token" {
+  count = var.create_cursor_git_token_secret ? 0 : 1
+  name  = var.cursor_git_token_secret_name
 }
 
 # ---------------------------------------------------------------------------
@@ -388,6 +413,14 @@ data "aws_iam_policy_document" "runtime_execution" {
     sid       = "ReadCursorApiKey"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [local.cursor_api_key_secret_arn]
+  }
+
+  # The adapter also fetches the Git write token so the worker can push branches. Scoped to
+  # that one secret. Self-hosted workers do not inherit any GitHub App / Actions token.
+  statement {
+    sid       = "ReadCursorGitToken"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [local.cursor_git_token_secret_arn]
   }
 
   statement {

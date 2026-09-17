@@ -38,6 +38,11 @@ output "cursor_api_key_secret_name" {
   value       = aws_secretsmanager_secret.cursor_api_key.name
 }
 
+output "cursor_git_token_secret_name" {
+  description = "Secrets Manager secret to upload the Git write token (fine-grained PAT) into."
+  value       = var.cursor_git_token_secret_name
+}
+
 output "worker_pool_name" {
   description = "Cursor worker pool name to select in the Cloud Agents dashboard."
   value       = var.worker_pool_name

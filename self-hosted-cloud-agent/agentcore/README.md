@@ -8,11 +8,62 @@ This target is **self-contained**: it has its own `.env.example` and `Makefile`,
 
 ## When To Use AgentCore Instances
 
-Use this path when a customer is already standardizing agent workloads on AgentCore Runtime and wants the Cursor worker to live alongside their other agents, under the same control plane, IAM model, and observability. It also fits workloads that want a **persistent workspace**: the EBS volume survives a session stop, so a large clone and its build caches are still there when the session is invoked again.
+### The value add, stated honestly
 
-Use ECS/Fargate or Kubernetes instead when you want a conventional long-running service. AgentCore has no service abstraction: a worker exists only after you call `InvokeAgentRuntime` for a specific session ID, there is no autoscaling loop, and sessions cannot be listed. Those constraints are the price of the AgentCore control plane, not incidental gaps.
+Every self-hosted Cursor backend — this one, `ec2/`, `ecs/`, `eks/` — delivers the *same* primary
+outcome: Cloud Agent tool execution runs in the customer's own AWS account, so source code, build
+output, secrets, and network egress never leave their VPC. **That data-residency win is not unique to
+AgentCore.** If keeping code in-account is the only goal, the `ecs/` target reaches it with less
+machinery, and Cursor's own guidance is that managed Cloud Agents (or the simpler self-hosted shapes)
+suit most teams. Do not pick this target for a benefit a plain Fargate service already gives you.
 
-Use AgentCore **microVMs** instead of Instances only if a worker that dies after 8 hours is acceptable. Instances is the right compute type here because it supports 14-day sessions, EBS volumes, session stop/restart, and instances that run in the customer's own account.
+AgentCore Instances earns its place only when a customer wants the *control plane* as well as the
+residency. Concretely, this target is the right choice when **two or more** of the following are true:
+
+1. **Agent-fleet consolidation.** The customer is already standardizing agent workloads on AgentCore
+   Runtime and wants the Cursor worker to live under the *same* control plane, IAM/execution-role
+   model, session lifecycle, and CloudWatch/X-Ray observability plumbing as their other agents —
+   rather than operating a second, ECS-shaped stack with its own scaling, logging, and IAM patterns.
+   AgentCore Runtime exists to absorb the "undifferentiated heavy lifting" of session management,
+   isolation, and observability; the value here is *one* operational model for every agent, not a
+   capability ECS lacks.
+2. **Strong per-task isolation as a platform guarantee.** Each session is a dedicated managed instance
+   with its own filesystem and credentials. Running one worker per session means one Cursor task
+   physically cannot read another task's workspace or secrets — enforced by the platform's session
+   boundary, not by convention inside a shared service. For regulated or multi-team environments where
+   that isolation must be demonstrable, this is a real differentiator over co-tenant tasks on a shared
+   Fargate service.
+3. **A warm, persistent workspace across runs.** The EBS volume survives a session stop/restart
+   (reusing the same session ID), so a large monorepo clone and its build/dependency caches are still
+   warm on the next invocation. This is a true local **block device**, not a network filesystem: for
+   git-object and `node_modules`-style small-file churn it avoids the latency you would take on Fargate
+   + EFS. Losing this is precisely what makes microVMs and ephemeral-storage shapes a poor fit for a
+   CI-runner-shaped worker.
+4. **EC2 economics you already own.** The compute is EC2 in the customer's account, so Savings Plans,
+   Reserved Instances, and On-Demand Capacity Reservations apply. For a **steady, always-on** pool
+   worker, committed-use EC2 is frequently cheaper per hour than the equivalent always-on Fargate task,
+   *and* the customer keeps full instance-type and network control.
+
+If none of those four hold, this target is over-engineered for the job.
+
+### When to prefer ECS/Fargate instead
+
+Prefer the `ecs/` sibling target when you want a **conventional long-running service**, or when usage
+is **bursty / scale-to-zero**. AgentCore has no service abstraction: a worker exists only after you
+call `InvokeAgentRuntime` for a specific session ID, there is no desired-count autoscaling loop, and
+sessions cannot even be listed — you own the session-ID bookkeeping. Fargate gives you a scheduler that
+keeps N tasks alive and restarts dead ones, Service Auto Scaling (including to zero between jobs so you
+pay only while work runs), and native task-level secret injection. For intermittent, issue-triggered
+load, a `RunTask`-per-issue on Fargate is both simpler to operate and usually cheaper than starting and
+tracking an AgentCore session per issue. Those AgentCore constraints are the price of its control
+plane, not incidental gaps — pay it only when you actually want that control plane.
+
+### When to prefer microVMs instead
+
+Use AgentCore **microVMs** instead of Instances only if a worker that dies after 8 hours and keeps no
+persistent workspace is acceptable. Instances is the right compute type for a Cursor pool worker
+because it supports 14-day sessions, EBS volumes that survive stop/restart, VPC-only networking, and
+instances that run in the customer's own account (so committed-use EC2 pricing applies).
 
 ## Documentation Map
 
@@ -21,6 +72,7 @@ Use AgentCore **microVMs** instead of Instances only if a worker that dies after
 - [`diagrams/architecture.png`](diagrams/architecture.png): simple component diagram (official AWS and GitHub icons, labeled edges). Regenerate with `python3 diagrams/render_architecture.py`.
 - [`terraform/README.md`](terraform/README.md): command runbook — `.env` / `export`, Terraform, image publishing, session lifecycle, key rotation, and cleanup.
 - [`diagrams/secrets-and-flow.png`](diagrams/secrets-and-flow.png): detailed secrets and env-var runbook (laptop `export`, GitHub Actions secrets, Terraform runtime env, adapter `GetSecretValue`, and the 15-step commands). Regenerate with `python3 diagrams/render_secrets_and_flow.py`.
+- [`diagrams/token-placement.png`](diagrams/token-placement.png): simple creator → store → consumer map for the five credentials (two AWS Secrets Manager secrets, two GitHub PATs, and the automatic `GITHUB_TOKEN`). Regenerate with `python3 diagrams/render_token_placement.py`.
 
 ## Quick Start
 
@@ -84,6 +136,8 @@ The capacity provider and agent runtime are managed through `aws_cloudcontrolapi
 ## Architecture
 
 ![Self-hosted Cloud Agents on AgentCore](diagrams/architecture.png)
+
+The AgentCore Runtime and its capacity provider are the **AWS-managed control plane**: you call `InvokeAgentRuntime` on them, and they provision and launch a managed EC2 instance into the customer VPC. They are not themselves VPC-resident. Only the **managed instance and its EBS workspace volume** run inside the customer VPC — Instances is VPC-only, and the runtime takes no `networkConfiguration` because it inherits networking from the capacity provider's `vpcConfiguration` (subnets and security groups). That is why the diagram draws the runtime outside the VPC lane.
 
 The Operator sits outside the lanes. Configure is the sample repo (steps 1–2). Credentials is Secrets Manager and ECR (steps 3–5). Run is the session, registration, kickoff, and PR (steps 6–14). Step 1 copies the static templates in `github/` into the sample repo (`.github/workflows/` and `.github/scripts/kick_cursor_agent.py`); the cookbook does not generate those files.
 

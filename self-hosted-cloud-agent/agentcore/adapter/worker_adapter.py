@@ -92,6 +92,14 @@ class Config:
         # the runtime execution role rather than delivered as a task secret.
         self.api_key = os.environ.get("CURSOR_API_KEY", "")
         self.api_key_secret_id = os.environ.get("CURSOR_API_KEY_SECRET_ID", "")
+
+        # Git write token so the worker can push branches for Cursor to open the PR.
+        # Self-hosted workers do NOT inherit Cursor's GitHub App token or the Actions
+        # GITHUB_TOKEN, so this is the only push credential the instance has. Fetched from
+        # Secrets Manager at boot (same pattern as the API key). Optional: absent means
+        # push is not configured and the worker still launches for read-only tasks.
+        self.git_token = os.environ.get("CURSOR_GIT_TOKEN", "")
+        self.git_token_secret_id = os.environ.get("CURSOR_GIT_TOKEN_SECRET_ID", "")
         self.aws_region = (
             os.environ.get("AWS_REGION")
             or os.environ.get("AWS_DEFAULT_REGION")
@@ -241,6 +249,86 @@ class WorkerSupervisor:
             )
         return api_key
 
+    def _read_secret(self, secret_id: str) -> str:
+        """Read a Secrets Manager string with the runtime execution role (AWS CLI, no boto3).
+
+        Returns "" for an empty/absent value rather than raising, so an optional secret
+        (like the Git token) can be missing without stopping worker startup.
+        """
+        result = subprocess.run(
+            [
+                "aws", "secretsmanager", "get-secret-value",
+                "--region", self.config.aws_region,
+                "--secret-id", secret_id,
+                "--query", "SecretString",
+                "--output", "text",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            log(f"could not read secret {secret_id}: {result.stderr.strip()}")
+            return ""
+        value = result.stdout.strip()
+        return "" if value == "None" else value
+
+    def resolve_git_token(self) -> str:
+        """Return the Git write token, from the env or Secrets Manager, or "" if none.
+
+        Optional by design: sibling targets push with whatever credential the host has,
+        and a read-only task needs no push. When present, it lets the worker push a
+        branch so Cursor's autoCreatePR can open the pull request.
+        """
+        if self.config.git_token:
+            log("using CURSOR_GIT_TOKEN from the environment")
+            return self.config.git_token
+        secret_id = self.config.git_token_secret_id
+        if not secret_id:
+            return ""
+        log(f"fetching the Git token from Secrets Manager: {secret_id}")
+        token = self._read_secret(secret_id)
+        if not token:
+            log(
+                f"Git token secret {secret_id} is empty; git push will not be "
+                "configured. Upload the fine-grained PAT value to enable PR creation."
+            )
+        return token
+
+    def _configure_git_credentials(self, token: str) -> None:
+        """Configure a git credential helper so pushes to github.com authenticate.
+
+        Writes the token to a store file readable only by the worker user and points
+        git at it via credential.helper. The token never appears in the remote URL, in
+        git config values other than the helper path, or in the worker's argv.
+        """
+        if not token:
+            return
+        cred_path = "/root/.git-credentials-cursor"
+        try:
+            with open(cred_path, "w", encoding="utf-8") as handle:
+                handle.write(f"https://x-access-token:{token}@github.com\n")
+            os.chmod(cred_path, 0o600)
+        except OSError as exc:
+            log(f"could not write git credential store: {exc}; git push not configured")
+            return
+        # Global config so both the adapter's git and the worker CLI's git pick it up.
+        subprocess.run(
+            ["git", "config", "--global", "credential.helper", f"store --file={cred_path}"],
+            capture_output=True,
+            text=True,
+            env=self._git_env(),
+            timeout=30,
+        )
+        subprocess.run(
+            ["git", "config", "--global", "url.https://github.com/.insteadOf", "git@github.com:"],
+            capture_output=True,
+            text=True,
+            env=self._git_env(),
+            timeout=30,
+        )
+        log("configured git credential helper for github.com pushes")
+
     def _git_env(self) -> dict[str, str]:
         """Drop inherited GIT_* so AgentCore cannot redirect git into another work tree."""
         env = {
@@ -387,6 +475,10 @@ class WorkerSupervisor:
         """
         worker_dir = self.config.worker_dir
         os.makedirs(worker_dir, exist_ok=True)
+
+        # Configure a git push/fetch credential first, if a token is available, so a
+        # private HTTPS remote can be fetched here and pushed to later by the worker.
+        self._configure_git_credentials(self.resolve_git_token())
 
         url = self._https_repository_url(self.config.repository_url.strip())
         if not url:

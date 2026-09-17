@@ -8,6 +8,8 @@ export
 CURSOR_WORKER_POOL_NAME ?= agentcore-platform-agents
 CURSOR_WORKER_IDLE_RELEASE_TIMEOUT ?= 600
 CURSOR_API_KEY_SECRET_NAME ?= cursor-agentcore-worker-api-key
+CURSOR_GIT_TOKEN_SECRET_NAME ?= cursor-agentcore-worker-git-token
+CREATE_CURSOR_GIT_TOKEN_SECRET ?= true
 WORKER_REPOSITORY_URL ?= $(shell git config --get remote.origin.url 2>/dev/null)
 
 AWS_PROFILE ?= default
@@ -56,7 +58,9 @@ AGENTCORE_TERRAFORM_VARS := \
 	-var "worker_pool_name=$(CURSOR_WORKER_POOL_NAME)" \
 	-var "worker_idle_release_timeout=$(CURSOR_WORKER_IDLE_RELEASE_TIMEOUT)" \
 	-var "worker_repository_url=$(WORKER_REPOSITORY_URL)" \
-	-var "cursor_api_key_secret_name=$(CURSOR_API_KEY_SECRET_NAME)"
+	-var "cursor_api_key_secret_name=$(CURSOR_API_KEY_SECRET_NAME)" \
+	-var "cursor_git_token_secret_name=$(CURSOR_GIT_TOKEN_SECRET_NAME)" \
+	-var "create_cursor_git_token_secret=$(CREATE_CURSOR_GIT_TOKEN_SECRET)"
 
 # Omitted rather than passed as null when unset, so the Terraform defaults resolve the
 # account default VPC.

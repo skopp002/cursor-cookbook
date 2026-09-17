@@ -63,6 +63,18 @@ variable "cursor_api_key_secret_name" {
   default     = "cursor-agentcore-worker-api-key"
 }
 
+variable "cursor_git_token_secret_name" {
+  description = "Secrets Manager secret name holding the Git write token (fine-grained PAT) the worker uses to push branches. Terraform creates the empty container only; upload the value out of band."
+  type        = string
+  default     = "cursor-agentcore-worker-git-token"
+}
+
+variable "create_cursor_git_token_secret" {
+  description = "Whether Terraform creates the Git token secret container. Set false if the secret already exists (operator-managed) so Terraform does not try to recreate it."
+  type        = bool
+  default     = true
+}
+
 # ---------------------------------------------------------------------------
 # Compute
 # ---------------------------------------------------------------------------

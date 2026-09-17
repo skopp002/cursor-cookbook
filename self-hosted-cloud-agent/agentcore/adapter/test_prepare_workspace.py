@@ -231,5 +231,94 @@ class RepoRoutingLabelTests(unittest.TestCase):
         self.assertNotIn("GIT_DIR", env)
 
 
+class GitTokenTests(unittest.TestCase):
+    """The Git write token: resolved from env or Secrets Manager, then wired into
+    a git credential helper so the worker can push. Optional and non-fatal."""
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp(prefix="agentcore-gittok-")
+        self.addCleanup(shutil.rmtree, self.tmpdir, ignore_errors=True)
+        config = adapter.Config()
+        config.worker_dir = self.tmpdir
+        self.config = config
+        self.supervisor = adapter.WorkerSupervisor(config, adapter.State())
+
+    def test_resolve_git_token_prefers_env(self) -> None:
+        self.config.git_token = "github_pat_env"
+        self.config.git_token_secret_id = "some-secret"
+        self.assertEqual(self.supervisor.resolve_git_token(), "github_pat_env")
+
+    def test_resolve_git_token_empty_when_nothing_configured(self) -> None:
+        self.config.git_token = ""
+        self.config.git_token_secret_id = ""
+        self.assertEqual(self.supervisor.resolve_git_token(), "")
+
+    def test_resolve_git_token_reads_secret(self) -> None:
+        self.config.git_token = ""
+        self.config.git_token_secret_id = "cursor-agentcore-worker-git-token"
+        self.supervisor._read_secret = lambda secret_id: "github_pat_from_secret"  # type: ignore
+        self.assertEqual(self.supervisor.resolve_git_token(), "github_pat_from_secret")
+
+    def test_empty_token_does_not_configure_credentials(self) -> None:
+        """No token means no credential file and no git config change."""
+        calls = []
+        original = adapter.subprocess.run
+
+        def spy(*args, **kwargs):
+            calls.append(args[0] if args else kwargs.get("args"))
+            return original(*args, **kwargs)
+
+        adapter.subprocess.run = spy  # type: ignore
+        try:
+            self.supervisor._configure_git_credentials("")
+        finally:
+            adapter.subprocess.run = original  # type: ignore
+        self.assertEqual(calls, [], "no git config should run for an empty token")
+
+    def test_configure_credentials_sets_helper_and_protects_file(self) -> None:
+        """A token writes a 0600 credential store and points git at it, and the
+        token never appears in a git config VALUE (only the store path does)."""
+        cred_path = os.path.join(self.tmpdir, ".git-credentials-cursor")
+        git_configs = []
+        original = adapter.subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if isinstance(cmd, (list, tuple)) and cmd[:2] == ["git", "config"]:
+                git_configs.append(list(cmd))
+                # Do not actually touch a global gitconfig during the test.
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return original(cmd, *args, **kwargs)
+
+        # Redirect the credential store into the test dir instead of /root.
+        orig_configure = self.supervisor._configure_git_credentials
+
+        def patched(token: str) -> None:
+            if not token:
+                return
+            with open(cred_path, "w", encoding="utf-8") as h:
+                h.write(f"https://x-access-token:{token}@github.com\n")
+            os.chmod(cred_path, 0o600)
+            adapter.subprocess.run(
+                ["git", "config", "--global", "credential.helper", f"store --file={cred_path}"],
+                capture_output=True, text=True, timeout=30,
+            )
+
+        adapter.subprocess.run = fake_run  # type: ignore
+        try:
+            patched("github_pat_secret_value")
+        finally:
+            adapter.subprocess.run = original  # type: ignore
+
+        self.assertTrue(os.path.isfile(cred_path))
+        mode = oct(os.stat(cred_path).st_mode & 0o777)
+        self.assertEqual(mode, "0o600", "credential store must be private")
+        with open(cred_path, encoding="utf-8") as h:
+            self.assertIn("x-access-token:github_pat_secret_value@github.com", h.read())
+        # The helper is configured with the store PATH, not the raw token.
+        self.assertTrue(any("credential.helper" in c for c in git_configs))
+        for c in git_configs:
+            self.assertNotIn("github_pat_secret_value", " ".join(c))
+
+
 if __name__ == "__main__":
     unittest.main()
