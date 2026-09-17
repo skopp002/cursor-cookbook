@@ -94,6 +94,16 @@ terraform-init: ec2-terraform-init
 terraform-plan: ec2-terraform-plan
 
 # AgentCore is self-contained: this forwards agentcore-* to agentcore/Makefile,
-# which reads agentcore/.env rather than this directory's .env.
+# which reads agentcore/.env rather than this directory's .env. The parent Makefile
+# `export`s its variables, so without stripping the overlapping names they would win
+# over agentcore's own `?=` defaults and .env — building linux/amd64 against
+# LINUX_ARM64 or pointing apply/push/secret at the EC2 repository and secret. `env -u`
+# removes them from the sub-make's environment so it resolves them from agentcore/.env
+# and its defaults. (Command-line `VAR=` assignments are not used: they would force an
+# empty value and beat `?=` rather than let the default apply.)
 agentcore-%:
-	$(MAKE) -C agentcore $@
+	env -u WORKER_IMAGE -u WORKER_PLATFORM -u WORKER_IMAGE_TAG \
+		-u AWS_REGION -u AWS_PROFILE -u ECR_REPOSITORY_NAME \
+		-u CURSOR_API_KEY_SECRET_NAME -u WORKER_REPOSITORY_URL \
+		-u CURSOR_WORKER_POOL_NAME -u CURSOR_WORKER_IDLE_RELEASE_TIMEOUT \
+		$(MAKE) -C agentcore $@

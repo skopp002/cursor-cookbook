@@ -535,6 +535,11 @@ class WorkerSupervisor:
                 self._checkout_origin_head()
             except RuntimeError as exc:
                 log(f"checkout after fetch failed: {exc}; continuing with origin only")
+            except subprocess.TimeoutExpired:
+                log(
+                    "checkout after fetch timed out; continuing with origin only "
+                    "so the worker can launch"
+                )
         else:
             log(f"workspace HEAD is {head.stdout.strip()[:12]}")
 

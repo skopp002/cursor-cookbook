@@ -118,6 +118,41 @@ class PrepareWorkspaceTests(unittest.TestCase):
         self.supervisor.prepare_workspace()
         self.assertFalse(os.path.exists(os.path.join(self.tmpdir, ".git")))
 
+    def test_checkout_timeout_after_fetch_is_not_fatal(self) -> None:
+        """A git checkout that times out after a good fetch must not fail startup.
+
+        Regression for the best-effort wrapper catching only RuntimeError: _git
+        raises subprocess.TimeoutExpired (e.g. `git remote set-head --auto` or the
+        checkout itself hitting the 120s default), which previously escaped and
+        marked the worker startup failed even though fetch already succeeded.
+        """
+        bare = tempfile.mkdtemp(prefix="agentcore-bare-")
+        self.addCleanup(shutil.rmtree, bare, ignore_errors=True)
+        seed = tempfile.mkdtemp(prefix="agentcore-seed-")
+        self.addCleanup(shutil.rmtree, seed, ignore_errors=True)
+
+        git("init", "--bare", cwd=bare)
+        git("clone", bare, seed, cwd="/")
+        git("checkout", "-B", "main", cwd=seed)
+        git(
+            "-c", "user.email=lab@example.com", "-c", "user.name=Lab",
+            "commit", "--allow-empty", "-m", "seed", cwd=seed,
+        )
+        git("push", "origin", "HEAD:main", cwd=seed)
+
+        self.supervisor.config.repository_url = bare
+
+        def boom() -> None:
+            raise subprocess.TimeoutExpired(cmd="git checkout", timeout=120)
+
+        self.supervisor._checkout_origin_head = boom  # type: ignore[method-assign]
+
+        # Must not raise despite the checkout timing out.
+        self.supervisor.prepare_workspace()
+
+        # Origin is still set even though the checkout was abandoned.
+        self.assertEqual(self.origin_url(), bare)
+
     def test_failed_fetch_does_not_mark_supervisor_startup_failed(self) -> None:
         """run() must reach worker launch even when origin cannot be fetched."""
         self.supervisor.config.repository_url = (

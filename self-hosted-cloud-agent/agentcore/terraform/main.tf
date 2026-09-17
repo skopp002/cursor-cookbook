@@ -117,6 +117,10 @@ locals {
       }]
 
       EnvironmentVariables = {
+        # AgentCore does not inject a region into the runtime, and the adapter's
+        # Secrets Manager calls need one. Pin it to the deployed region so
+        # get-secret-value hits the right endpoint in every supported region.
+        AWS_REGION                           = var.aws_region
         CURSOR_WORKER_POOL_NAME              = var.worker_pool_name
         CURSOR_WORKER_IDLE_RELEASE_TIMEOUT   = tostring(var.worker_idle_release_timeout)
         CURSOR_WORKER_DIR                    = local.workspace_mount_path
